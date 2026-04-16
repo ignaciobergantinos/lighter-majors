@@ -11,7 +11,15 @@
 
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT="$0"
+# Resolve symlinks so we always find the real project directory
+while [ -L "$SCRIPT" ]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+  SCRIPT="$(readlink "$SCRIPT")"
+  # Handle relative symlinks
+  [[ "$SCRIPT" != /* ]] && SCRIPT="$SCRIPT_DIR/$SCRIPT"
+done
+PROJECT_DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 PID_FILE="$PROJECT_DIR/.lighter.pid"
 LOG_FILE="$PROJECT_DIR/.lighter.log"
 PORT="${LIGHTER_PORT:-3000}"
@@ -47,23 +55,8 @@ case "${1:-start}" in
     ;;
 
   start)
-    # Build if .next doesn't exist
-    if [ ! -d "$PROJECT_DIR/.next" ]; then
-      echo "📦 First run — building lighter..."
-      npx next build
-    fi
-
-    echo "🚀 Starting lighter on http://localhost:$PORT"
-
-    # If --daemon flag, run in background
-    if [ "${2:-}" = "--daemon" ]; then
-      nohup npx next start --port "$PORT" > "$LOG_FILE" 2>&1 &
-      echo $! > "$PID_FILE"
-      echo "   Running in background (PID $!). Logs: $LOG_FILE"
-      echo "   Stop with: lighter stop"
-    else
-      exec npx next start --port "$PORT"
-    fi
+    echo "🖥️  Starting Lighter Majors desktop app..."
+    exec npm run desktop
     ;;
 
   status)

@@ -1,5 +1,5 @@
 // ── Electron Main Process — Floating Desktop Widget ─────────
-import { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, globalShortcut } from 'electron'
 import * as path from 'path'
 import {
   loadWindowState,
@@ -199,9 +199,37 @@ ipcMain.on('app:quit', () => {
   app.quit()
 })
 
+// ── Global Shortcuts (system-wide, work even when app is not focused) ──
+const API_URL = 'http://localhost:3000'
+
+function fireTrade(marketIndex: number, side: 'long' | 'short'): void {
+  fetch(`${API_URL}/api/trade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ marketIndex, side }),
+  }).catch((err) => {
+    console.error(`[global-shortcut] trade failed:`, err)
+  })
+}
+
+function registerGlobalShortcuts(): void {
+  // Ctrl+1 (or Cmd+1 on Mac) → Long BTC (marketIndex 1)
+  globalShortcut.register('CommandOrControl+1', () => {
+    console.log('[global-shortcut] Ctrl+1 → Long BTC')
+    fireTrade(1, 'long')
+  })
+
+  // Ctrl+3 (or Cmd+3 on Mac) → Long SOL (marketIndex 2)
+  globalShortcut.register('CommandOrControl+3', () => {
+    console.log('[global-shortcut] Ctrl+3 → Long SOL')
+    fireTrade(2, 'long')
+  })
+}
+
 app.whenReady().then(() => {
   createTray()
   createWindow()
+  registerGlobalShortcuts()
 
   app.on('activate', () => {
     if (mainWindow === null) {
@@ -216,4 +244,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })

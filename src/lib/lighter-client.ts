@@ -109,7 +109,7 @@ export async function placeMarketOrder(
   // Max slippage tolerance (0.05 = 5%) — SDK auto-fetches best orderbook price
   const MAX_SLIPPAGE = 0.05
 
-  log.info('lighter_sdk.create_market_order.start', {
+  log.debug('lighter_sdk.create_market_order.start', {
     marketIndex,
     isAsk,
     baseAmount,
@@ -148,7 +148,7 @@ export async function placeMarketOrder(
     }
 
     const txHash = respSendTx?.tx_hash
-    log.info('lighter_sdk.create_market_order.success', {
+    log.debug('lighter_sdk.create_market_order.success', {
       durationMs,
       txHash,
       marketIndex,
@@ -193,7 +193,7 @@ export async function closePosition(
   const isAsk = pos.side === 'long' // sell to close long
   const size = Math.abs(parseFloat(pos.size))
 
-  log.info('lighter_api.close_position', {
+  log.debug('lighter_api.close_position', {
     marketIndex,
     symbol: pos.symbol,
     side: pos.side,
