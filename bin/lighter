@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#
+# lighter — start the Lighter Majors trading widget
+#
+# Usage:
+#   lighter          # production mode (builds first if needed)
+#   lighter dev      # development mode with hot-reload
+#   lighter build    # build only, don't start
+#   lighter stop     # stop the background server
+#
+
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PID_FILE="$PROJECT_DIR/.lighter.pid"
+LOG_FILE="$PROJECT_DIR/.lighter.log"
+PORT="${LIGHTER_PORT:-3000}"
+
+cd "$PROJECT_DIR"
+
+case "${1:-start}" in
+  dev)
+    echo "🔥 Starting lighter in dev mode on http://localhost:$PORT"
+    exec npx next dev --port "$PORT"
+    ;;
+
+  build)
+    echo "📦 Building lighter..."
+    npx next build
+    echo "✅ Build complete"
+    ;;
+
+  stop)
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE")
+      if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID"
+        rm -f "$PID_FILE"
+        echo "🛑 Lighter stopped (PID $PID)"
+      else
+        rm -f "$PID_FILE"
+        echo "⚠️  No running process found, cleaned up stale PID file"
+      fi
+    else
+      echo "⚠️  Lighter is not running"
+    fi
+    ;;
+
+  start)
+    # Build if .next doesn't exist
+    if [ ! -d "$PROJECT_DIR/.next" ]; then
+      echo "📦 First run — building lighter..."
+      npx next build
+    fi
+
+    echo "🚀 Starting lighter on http://localhost:$PORT"
+
+    # If --daemon flag, run in background
+    if [ "${2:-}" = "--daemon" ]; then
+      nohup npx next start --port "$PORT" > "$LOG_FILE" 2>&1 &
+      echo $! > "$PID_FILE"
+      echo "   Running in background (PID $!). Logs: $LOG_FILE"
+      echo "   Stop with: lighter stop"
+    else
+      exec npx next start --port "$PORT"
+    fi
+    ;;
+
+  status)
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      echo "✅ Lighter is running (PID $(cat "$PID_FILE")) on http://localhost:$PORT"
+    else
+      echo "⚠️  Lighter is not running"
+    fi
+    ;;
+
+  *)
+    echo "Usage: lighter [dev|build|start|stop|status]"
+    echo ""
+    echo "Commands:"
+    echo "  start          Start production server (default)"
+    echo "  start --daemon Start in background"
+    echo "  dev            Start dev server with hot-reload"
+    echo "  build          Build for production"
+    echo "  stop           Stop background server"
+    echo "  status         Check if server is running"
+    exit 1
+    ;;
+esac

@@ -2,6 +2,9 @@
   "name": "lighter-scaffold",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "lighter": "./bin/lighter"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

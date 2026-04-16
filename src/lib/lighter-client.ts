@@ -1,5 +1,6 @@
 // ── Lighter REST API Client (server-side) ──────────────────
 import { API_BASE, MARKETS } from './constants'
+import { generateAuthToken, getKeyConfig } from './lighter-keys'
 import type {
   AccountData,
   MarketSymbol,
@@ -7,18 +8,16 @@ import type {
   TradeResponse,
 } from './types'
 
-const accountIndex = () => process.env.LIGHTER_ACCOUNT_INDEX ?? '0'
-const authToken = () => process.env.LIGHTER_AUTH_TOKEN ?? ''
-
 function authHeaders(): HeadersInit {
-  return { authorization: authToken() }
+  return { authorization: generateAuthToken() }
 }
 
 // ── Read: positions + balance ───────────────────────────────
 
 export async function fetchAccountData(): Promise<AccountData> {
+  const { accountIndex } = getKeyConfig()
   const res = await fetch(
-    `${API_BASE}/api/v1/account?by=index&value=${accountIndex()}`,
+    `${API_BASE}/api/v1/account?by=index&value=${accountIndex}`,
     { headers: authHeaders(), cache: 'no-store' },
   )
   if (!res.ok) throw new Error(`Account fetch failed: ${res.status}`)

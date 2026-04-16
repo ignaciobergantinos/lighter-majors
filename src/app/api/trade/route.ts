@@ -5,7 +5,7 @@ import { MARKETS } from '@/lib/constants'
 
 export async function POST(req: NextRequest) {
   try {
-    const { marketIndex, side } = await req.json()
+    const { marketIndex, side, baseAmount: customBaseAmount } = await req.json()
 
     // Validate market
     const market = Object.values(MARKETS).find(
@@ -19,7 +19,10 @@ export async function POST(req: NextRequest) {
     }
 
     const isAsk = side === 'short'
-    const baseAmount = market.minBaseAmount
+    const baseAmount =
+      typeof customBaseAmount === 'number' && customBaseAmount >= market.minBaseAmount
+        ? customBaseAmount
+        : market.minBaseAmount
 
     const result = await placeMarketOrder(marketIndex, isAsk, baseAmount)
     return NextResponse.json(result)

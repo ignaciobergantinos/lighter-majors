@@ -7,6 +7,8 @@ import { MARKETS } from '@/lib/constants'
 interface TradeParams {
   symbol: MarketSymbol
   side: 'long' | 'short'
+  /** Base amount to trade. Falls back to market minimum if omitted. */
+  baseAmount?: number
 }
 
 async function executeTrade(params: TradeParams): Promise<TradeResponse> {
@@ -17,6 +19,7 @@ async function executeTrade(params: TradeParams): Promise<TradeResponse> {
     body: JSON.stringify({
       marketIndex: market.marketIndex,
       side: params.side,
+      ...(params.baseAmount != null && { baseAmount: params.baseAmount }),
     }),
   })
   return res.json()
