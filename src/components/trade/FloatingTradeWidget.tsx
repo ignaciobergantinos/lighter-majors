@@ -11,8 +11,9 @@ import { PairTabs } from './PairTabs'
 import { MARKETS } from '@/lib/constants'
 
 export function FloatingTradeWidget() {
-  const { isOpen, isPinned, activeTab, usdSize, prices, toggleWidget, togglePinned, setActiveTab, setUsdSize } =
+  const { isOpen, isPinned, activeTab, usdSizes, prices, toggleWidget, togglePinned, setActiveTab, setUsdSize } =
     useWidgetStore()
+  const usdSize = usdSizes[activeTab]
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
   const { placeTrade, closeAll, isTrading, isClosing } = useTradeExecution()
   const sizeInputRef = useRef<HTMLInputElement>(null)

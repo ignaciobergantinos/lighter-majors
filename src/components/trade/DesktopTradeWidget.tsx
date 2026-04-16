@@ -13,8 +13,9 @@ import { DesktopTitleBar } from './DesktopTitleBar'
 import { MARKETS } from '@/lib/constants'
 
 export function DesktopTradeWidget() {
-  const { activeTab, usdSize, prices, setActiveTab, setUsdSize } =
+  const { activeTab, usdSizes, prices, setActiveTab, setUsdSize } =
     useWidgetStore()
+  const usdSize = usdSizes[activeTab]
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
   const { placeTrade, closeAll, isTrading, isClosing } = useTradeExecution()
   const sizeInputRef = useRef<HTMLInputElement>(null)
