@@ -73,6 +73,7 @@ export function notifyPositionClose(params: {
 }): void {
   const { position } = params
   const sideLabel = position.side === 'long' ? 'LONG' : 'SHORT'
+  const emoji = position.side === 'long' ? '🟢' : '🔴'
 
   const pnl = parseFloat(position.pnl || '0')
   const entryPrice = parseFloat(position.entryPrice || '0')
@@ -81,27 +82,30 @@ export function notifyPositionClose(params: {
   const pctChange = notional > 0 ? (pnl / notional) * 100 : 0
 
   // Use closing price for volume if available, otherwise entry price
-  const volumePrice = params.closingPrice ?? entryPrice
-  const volume = volumePrice * size
+  const closingPrice = params.closingPrice ?? entryPrice
+  const closeNotional = closingPrice * size
 
-  const message = [
-    `**[Lighter] ${sideLabel} ${position.symbol}**`,
-    `Trade result:`,
+  const lines = [
+    `${emoji} **[Lighter] ${sideLabel} ${position.symbol}** — ${size} ${position.symbol}`,
     ``,
-    `Percent: ${formatPercent(pctChange)}`,
-    `Profit: ${formatUsd(pnl)} ${profitEmoji(pnl)}`,
-    `Volume: ${formatUsd(volume)}`,
-  ].join('\n')
+    `Entry: ${formatUsd(entryPrice)} → Exit: ${formatUsd(closingPrice)}`,
+    `Size: ${formatUsd(notional)} → ${formatUsd(closeNotional)}`,
+    `Profit: ${formatUsd(pnl)} (${formatPercent(pctChange)}) ${profitEmoji(pnl)}`,
+  ]
 
   // Fire-and-forget — do not await
-  void postToDiscord(message)
+  void postToDiscord(lines.join('\n'))
 }
 
 /** Notify Discord when all positions are closed. Fire-and-forget. */
-export function notifyCloseAll(positions: Position[]): void {
+export function notifyCloseAll(
+  positions: Position[],
+  markPrices?: Record<number, number>,
+): void {
   if (positions.length === 0) return
 
   for (const position of positions) {
-    notifyPositionClose({ position })
+    const closingPrice = markPrices?.[position.marketIndex]
+    notifyPositionClose({ position, closingPrice })
   }
 }

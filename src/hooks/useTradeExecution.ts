@@ -37,20 +37,37 @@ async function executeTrade(params: TradeParams): Promise<TradeResponse> {
   return parseTradeResponse(res)
 }
 
-async function executeCloseAll(): Promise<TradeResponse> {
+interface CloseAllParams {
+  /** Mark prices keyed by market index — forwarded for Discord notification context. */
+  markPrices?: Record<number, number>
+}
+
+async function executeCloseAll(params?: CloseAllParams): Promise<TradeResponse> {
   const res = await fetch('/api/close', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ closeAll: true }),
+    body: JSON.stringify({
+      closeAll: true,
+      ...(params?.markPrices && { markPrices: params.markPrices }),
+    }),
   })
   return parseTradeResponse(res)
 }
 
-async function executeClose(marketIndex: number): Promise<TradeResponse> {
+interface CloseParams {
+  marketIndex: number
+  /** Current mark price — forwarded for Discord notification context. */
+  markPrice?: number
+}
+
+async function executeClose(params: CloseParams): Promise<TradeResponse> {
   const res = await fetch('/api/close', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ marketIndex }),
+    body: JSON.stringify({
+      marketIndex: params.marketIndex,
+      ...(params.markPrice != null && { markPrice: params.markPrice }),
+    }),
   })
   return parseTradeResponse(res)
 }
@@ -65,7 +82,7 @@ export function useTradeExecution() {
   })
 
   const closeAllMutation = useMutation({
-    mutationFn: executeCloseAll,
+    mutationFn: (params: CloseAllParams | undefined) => executeCloseAll(params),
     onSuccess: invalidate,
   })
 

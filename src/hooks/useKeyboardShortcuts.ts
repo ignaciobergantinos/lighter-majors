@@ -31,7 +31,7 @@ export function useKeyboardShortcuts() {
           })
           break
         case 'close-all':
-          closeAll()
+          closeAll(undefined)
           break
         case 'toggle-widget':
           toggleWidget()

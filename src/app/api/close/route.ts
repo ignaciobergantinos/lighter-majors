@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const log = createLogger(cid)
 
   try {
-    const { closeAll, marketIndex } = await req.json()
+    const { closeAll, marketIndex, markPrice, markPrices } = await req.json()
 
     if (closeAll) {
       // Capture positions before closing for Discord notifications
@@ -45,7 +45,9 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      notifyCloseAll(openPositions)
+      const parsedPrices: Record<number, number> | undefined =
+        markPrices && typeof markPrices === 'object' ? markPrices : undefined
+      notifyCloseAll(openPositions, parsedPrices)
       return NextResponse.json({ success: true })
     }
 
@@ -83,7 +85,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (position) {
-      notifyPositionClose({ position })
+      notifyPositionClose({
+        position,
+        closingPrice: typeof markPrice === 'number' ? markPrice : undefined,
+      })
     }
 
     return NextResponse.json(result)

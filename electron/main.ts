@@ -1,5 +1,16 @@
 // ── Electron Main Process — Floating Desktop Widget ─────────
-import { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain, globalShortcut } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  nativeImage,
+  screen,
+  ipcMain,
+  globalShortcut,
+  systemPreferences,
+  dialog,
+} from 'electron'
 import * as path from 'path'
 import {
   loadWindowState,
@@ -202,27 +213,119 @@ ipcMain.on('app:quit', () => {
 // ── Global Shortcuts (system-wide, work even when app is not focused) ──
 const API_URL = 'http://localhost:3000'
 
-function fireTrade(marketIndex: number, side: 'long' | 'short'): void {
+// Market config mirrored from constants.ts (main process can't import renderer code)
+const MARKETS: Record<string, { marketIndex: number; minBaseAmount: number; sizeDecimals: number; priceDecimals: number }> = {
+  BTC: { marketIndex: 1, minBaseAmount: 0.0002, sizeDecimals: 5, priceDecimals: 1 },
+  ETH: { marketIndex: 0, minBaseAmount: 0.005, sizeDecimals: 4, priceDecimals: 2 },
+  SOL: { marketIndex: 2, minBaseAmount: 0.05, sizeDecimals: 3, priceDecimals: 3 },
+}
+
+// Cached widget state from renderer — updated via IPC
+let widgetState = { activeTab: 'BTC', usdSize: '10', markPrice: 0 }
+
+ipcMain.on('widget:state-sync', (_event, state: { activeTab: string; usdSize: string; markPrice?: number }) => {
+  widgetState = { ...widgetState, ...state }
+})
+
+function fireTrade(side: 'long' | 'short'): void {
+  const market = MARKETS[widgetState.activeTab]
+  if (!market) {
+    console.error(`[global-shortcut] Unknown market: ${widgetState.activeTab}`)
+    return
+  }
+
+  // Convert USD size to base amount using mark price
+  const usdSize = parseFloat(widgetState.usdSize) || 0
+  const price = widgetState.markPrice || 0
+  const baseAmount = price > 0 ? usdSize / price : undefined
+
+  console.log(`[global-shortcut] ${side.toUpperCase()} ${widgetState.activeTab} — $${usdSize} (~${baseAmount?.toFixed(market.sizeDecimals) ?? 'min'} ${widgetState.activeTab})`)
+
   fetch(`${API_URL}/api/trade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ marketIndex, side }),
+    body: JSON.stringify({
+      marketIndex: market.marketIndex,
+      side,
+      ...(baseAmount != null && baseAmount >= market.minBaseAmount && { baseAmount }),
+      ...(price > 0 && { markPrice: price }),
+    }),
   }).catch((err) => {
     console.error(`[global-shortcut] trade failed:`, err)
   })
 }
 
-function registerGlobalShortcuts(): void {
-  // Ctrl+1 (or Cmd+1 on Mac) → Long BTC (marketIndex 1)
-  globalShortcut.register('CommandOrControl+1', () => {
-    console.log('[global-shortcut] Ctrl+1 → Long BTC')
-    fireTrade(1, 'long')
+/**
+ * On macOS, global shortcuts require Accessibility permission.
+ * Prompt the user if permission hasn't been granted yet.
+ * Returns true if permission is granted (or not macOS).
+ */
+function ensureAccessibilityPermission(): boolean {
+  if (process.platform !== 'darwin') return true
+
+  const isTrusted = systemPreferences.isTrustedAccessibilityClient(false)
+  if (isTrusted) return true
+
+  console.warn('[global-shortcut] Accessibility permission not granted — prompting user')
+
+  // Show explanation dialog, then trigger the OS permission prompt
+  dialog.showMessageBoxSync({
+    type: 'info',
+    title: 'Accessibility Permission Required',
+    message: 'Lighter Majors needs Accessibility permission to register global keyboard shortcuts (Ctrl+1, Ctrl+3) that work from any app.',
+    detail: 'Click OK to open System Settings. Add this app under Privacy & Security → Accessibility, then restart the app.',
+    buttons: ['OK'],
   })
 
-  // Ctrl+3 (or Cmd+3 on Mac) → Long SOL (marketIndex 2)
-  globalShortcut.register('CommandOrControl+3', () => {
-    console.log('[global-shortcut] Ctrl+3 → Long SOL')
-    fireTrade(2, 'long')
+  // This call with `true` triggers the macOS permission prompt / System Settings
+  systemPreferences.isTrustedAccessibilityClient(true)
+  return false
+}
+
+function registerGlobalShortcuts(): void {
+  const hasPermission = ensureAccessibilityPermission()
+  if (!hasPermission) {
+    console.warn('[global-shortcut] Shortcuts not registered — waiting for Accessibility permission. Restart app after granting.')
+    // Notify renderer that shortcuts are inactive
+    mainWindow?.webContents.send('shortcuts:status', { active: false, reason: 'accessibility-permission' })
+    return
+  }
+
+  // Ctrl+1 → Long (selected symbol + size)
+  const longOk = globalShortcut.register('Control+1', () => {
+    console.log('[global-shortcut] Ctrl+1 → LONG')
+    fireTrade('long')
+  })
+
+  if (!longOk) {
+    console.error('[global-shortcut] Failed to register Control+1')
+  } else {
+    console.log('[global-shortcut] ✓ Registered Control+1 → Long')
+  }
+
+  // Ctrl+3 → Short (selected symbol + size)
+  const shortOk = globalShortcut.register('Control+3', () => {
+    console.log('[global-shortcut] Ctrl+3 → SHORT')
+    fireTrade('short')
+  })
+
+  if (!shortOk) {
+    console.error('[global-shortcut] Failed to register Control+3')
+  } else {
+    console.log('[global-shortcut] ✓ Registered Control+3 → Short')
+  }
+
+  const longRegistered = globalShortcut.isRegistered('Control+1')
+  const shortRegistered = globalShortcut.isRegistered('Control+3')
+
+  console.log(`[global-shortcut] Verified: Ctrl+1=${longRegistered}, Ctrl+3=${shortRegistered}`)
+
+  mainWindow?.webContents.send('shortcuts:status', {
+    active: longRegistered && shortRegistered,
+    shortcuts: {
+      'Control+1': longRegistered,
+      'Control+3': shortRegistered,
+    },
   })
 }
 

@@ -17,4 +17,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   /** OS platform — used to adjust layout for macOS traffic-light buttons */
   platform: process.platform,
+
+  /** Push current widget state so global shortcuts use the selected symbol + size */
+  syncWidgetState: (state: { activeTab: string; usdSize: string; markPrice?: number }) =>
+    ipcRenderer.send('widget:state-sync', state),
+
+  /** Listen for global shortcut registration status from main process */
+  onShortcutsStatus: (callback: (status: { active: boolean; reason?: string; shortcuts?: Record<string, boolean> }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: { active: boolean; reason?: string; shortcuts?: Record<string, boolean> }) => callback(status)
+    ipcRenderer.on('shortcuts:status', listener)
+    return () => ipcRenderer.removeListener('shortcuts:status', listener)
+  },
 })

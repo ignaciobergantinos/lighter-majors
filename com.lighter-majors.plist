@@ -16,7 +16,7 @@
     <true/>
 
     <key>WorkingDirectory</key>
-    <string>/Users/nachobergantinos/Desktop/Trabajo/personal/lighter-majors</string>
+    <string>/Users/nachobergantinos/lighter-majors</string>
 
     <key>EnvironmentVariables</key>
     <dict>

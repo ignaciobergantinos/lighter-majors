@@ -1,7 +1,7 @@
 // ── Desktop Trade Widget — Full-window, no FAB ─────────────
 // Responsive layout that adapts to very small viewport sizes
 'use client'
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useWidgetStore } from '@/store/widget-store'
 import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
@@ -11,6 +11,7 @@ import { useViewportSize } from '@/hooks/useViewportSize'
 import { PairTabs } from './PairTabs'
 import { DesktopTitleBar } from './DesktopTitleBar'
 import { MARKETS } from '@/lib/constants'
+import type { MarketSymbol } from '@/lib/types'
 
 export function DesktopTradeWidget() {
   const { activeTab, usdSizes, prices, setActiveTab, setUsdSize } =
@@ -26,6 +27,16 @@ export function DesktopTradeWidget() {
 
   const market = MARKETS[activeTab]
   const currentPrice = prices[activeTab]
+
+  // Sync widget state to Electron main process for global shortcuts
+  const markPrice = currentPrice ? parseFloat(currentPrice.markPrice) : 0
+  useEffect(() => {
+    window.electronAPI?.syncWidgetState({
+      activeTab,
+      usdSize,
+      markPrice: markPrice || undefined,
+    })
+  }, [activeTab, usdSize, markPrice])
 
   const getBaseAmount = useCallback((): number | undefined => {
     const usd = parseFloat(usdSize)
@@ -43,9 +54,10 @@ export function DesktopTradeWidget() {
         symbol: activeTab,
         side,
         baseAmount: getBaseAmount(),
+        markPrice: markPrice || undefined,
       })
     },
-    [placeTrade, activeTab, getBaseAmount],
+    [placeTrade, activeTab, getBaseAmount, markPrice],
   )
 
   const pnl = parseFloat(aggregatePnl || '0')
@@ -118,7 +130,16 @@ export function DesktopTradeWidget() {
             {isTrading ? '...' : 'Short'}
           </button>
           <button
-            onClick={() => closeAll()}
+            onClick={() => {
+              const markPrices: Record<number, number> = {}
+              for (const [sym, tick] of Object.entries(prices)) {
+                if (tick) {
+                  const m = MARKETS[sym as MarketSymbol]
+                  markPrices[m.marketIndex] = parseFloat(tick.markPrice)
+                }
+              }
+              closeAll({ markPrices })
+            }}
             disabled={isClosing || !hasPositions}
             className={`py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-lg
                        bg-zinc-800 text-zinc-400 border border-zinc-700

@@ -9,6 +9,7 @@ import { usePriceFeed } from '@/hooks/usePriceFeed'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { PairTabs } from './PairTabs'
 import { MARKETS } from '@/lib/constants'
+import type { MarketSymbol } from '@/lib/types'
 
 export function FloatingTradeWidget() {
   const { isOpen, isPinned, activeTab, usdSizes, prices, toggleWidget, togglePinned, setActiveTab, setUsdSize } =
@@ -36,15 +37,18 @@ export function FloatingTradeWidget() {
     return rounded >= market.minBaseAmount ? rounded : undefined
   }, [usdSize, currentPrice, market])
 
+  const markPrice = currentPrice ? parseFloat(currentPrice.markPrice) : 0
+
   const handleTrade = useCallback(
     (side: 'long' | 'short') => {
       placeTrade({
         symbol: activeTab,
         side,
         baseAmount: getBaseAmount(),
+        markPrice: markPrice || undefined,
       })
     },
-    [placeTrade, activeTab, getBaseAmount],
+    [placeTrade, activeTab, getBaseAmount, markPrice],
   )
 
   const pnl = parseFloat(aggregatePnl || '0')
@@ -140,7 +144,16 @@ export function FloatingTradeWidget() {
                 {isTrading ? '...' : 'Short'}
               </button>
               <button
-                onClick={() => closeAll()}
+                onClick={() => {
+                  const markPrices: Record<number, number> = {}
+                  for (const [sym, tick] of Object.entries(prices)) {
+                    if (tick) {
+                      const m = MARKETS[sym as MarketSymbol]
+                      markPrices[m.marketIndex] = parseFloat(tick.markPrice)
+                    }
+                  }
+                  closeAll({ markPrices })
+                }}
                 disabled={isClosing || !hasPositions}
                 className="py-2 text-xs font-bold rounded-lg
                            bg-zinc-800 text-zinc-400 border border-zinc-700
