@@ -1,6 +1,6 @@
 // ── Lighter REST API Client (server-side) ──────────────────
 import { API_BASE, MARKETS } from './constants'
-import { generateAuthToken, getKeyConfig, getSignerClient } from './lighter-keys'
+import { generateAuthToken, getKeyConfig, ensureSignerReady } from './lighter-keys'
 import { createLogger } from './logger'
 import type {
   AccountData,
@@ -119,65 +119,45 @@ export async function placeMarketOrder(
   })
 
   try {
-    const client = getSignerClient()
+    // Ensure the SDK's nonce manager has initialized before sending orders.
+    // The SDK initializes nonces async (fire-and-forget) and has a bug where
+    // it never recovers from "invalid nonce" errors on its own.
+    const client = await ensureSignerReady()
 
-    // The SDK's nonce manager initializes asynchronously (fire-and-forget).
-    // The first call after a cold start may fail with "invalid nonce" because
-    // the nonce hasn't been fetched from the API yet. The SDK auto-refreshes
-    // the nonce on failure, so a single retry resolves it.
-    const MAX_ATTEMPTS = 2
-    let lastError: string | null = null
+    const [order, respSendTx, error] = await client.create_market_order_limited_slippage(
+      marketIndex,
+      0,              // client_order_index
+      baseAmountInt,
+      MAX_SLIPPAGE,   // max slippage — SDK fetches orderbook price and applies this tolerance
+      isAsk,
+      reduceOnly,
+    )
 
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const [order, respSendTx, error] = await client.create_market_order_limited_slippage(
-        marketIndex,
-        0,              // client_order_index
-        baseAmountInt,
-        MAX_SLIPPAGE,   // max slippage — SDK fetches orderbook price and applies this tolerance
-        isAsk,
-        reduceOnly,
-      )
+    const durationMs = Math.round(performance.now() - start)
 
-      if (error) {
-        lastError = error
-        if (attempt < MAX_ATTEMPTS && error.includes('invalid nonce')) {
-          log.warn('lighter_sdk.create_market_order.nonce_retry', {
-            attempt,
-            error,
-            marketIndex,
-          })
-          continue
-        }
-
-        const durationMs = Math.round(performance.now() - start)
-        log.error('lighter_sdk.create_market_order.error', {
-          durationMs,
-          error,
-          attempt,
-          marketIndex,
-          isAsk,
-          baseAmount,
-          reduceOnly,
-        })
-        return { success: false, error }
-      }
-
-      const durationMs = Math.round(performance.now() - start)
-      const txHash = respSendTx?.tx_hash
-      log.info('lighter_sdk.create_market_order.success', {
+    if (error) {
+      log.error('lighter_sdk.create_market_order.error', {
         durationMs,
-        txHash,
-        attempt,
+        error,
         marketIndex,
         isAsk,
         baseAmount,
         reduceOnly,
       })
-
-      return { success: true, txHash }
+      return { success: false, error }
     }
 
-    return { success: false, error: lastError ?? 'Max attempts reached' }
+    const txHash = respSendTx?.tx_hash
+    log.info('lighter_sdk.create_market_order.success', {
+      durationMs,
+      txHash,
+      marketIndex,
+      isAsk,
+      baseAmount,
+      reduceOnly,
+    })
+
+    return { success: true, txHash }
   } catch (err) {
     const durationMs = Math.round(performance.now() - start)
     const message = err instanceof Error ? err.message : 'SDK order failed'

@@ -56,7 +56,7 @@ export function notifyPositionOpen(params: {
   const sideLabel = params.side === 'long' ? 'LONG' : 'SHORT'
   const emoji = params.side === 'long' ? '🟢' : '🔴'
 
-  let message = `${emoji} **${sideLabel} ${symbol}** — ${params.baseAmount} ${symbol}`
+  let message = `${emoji} **[Lighter] ${sideLabel} ${symbol}** — ${params.baseAmount} ${symbol}`
   if (params.price) {
     const volume = params.baseAmount * params.price
     message += ` @ ~$${params.price.toFixed(2)} (~$${volume.toFixed(2)})`
@@ -85,7 +85,7 @@ export function notifyPositionClose(params: {
   const volume = volumePrice * size
 
   const message = [
-    `**${sideLabel} ${position.symbol}**`,
+    `**[Lighter] ${sideLabel} ${position.symbol}**`,
     `Trade result:`,
     ``,
     `Percent: ${formatPercent(pctChange)}`,

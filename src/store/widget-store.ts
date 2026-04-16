@@ -1,5 +1,6 @@
 // ── Zustand Widget Store ────────────────────────────────────
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { MarketSymbol, PriceTick } from '@/lib/types'
 import { MARKETS } from '@/lib/constants'
 
@@ -18,19 +19,32 @@ interface WidgetState {
   setUsdSize: (size: string) => void
 }
 
-export const useWidgetStore = create<WidgetState>((set) => ({
-  isOpen: false,
-  isPinned: true,
-  activeTab: 'BTC',
-  prices: { BTC: null, ETH: null, SOL: null },
-  usdSize: String(MARKETS.BTC.minQuote),
+export const useWidgetStore = create<WidgetState>()(
+  persist(
+    (set) => ({
+      isOpen: false,
+      isPinned: true,
+      activeTab: 'BTC',
+      prices: { BTC: null, ETH: null, SOL: null },
+      usdSize: String(MARKETS.BTC.minQuote),
 
-  toggleWidget: () => set((s) => ({ isOpen: !s.isOpen })),
-  setOpen: (open) => set({ isOpen: open }),
-  togglePinned: () => set((s) => ({ isPinned: !s.isPinned })),
-  setActiveTab: (tab) =>
-    set({ activeTab: tab, usdSize: String(MARKETS[tab].minQuote) }),
-  updatePrice: (tick) =>
-    set((s) => ({ prices: { ...s.prices, [tick.symbol]: tick } })),
-  setUsdSize: (size) => set({ usdSize: size }),
-}))
+      toggleWidget: () => set((s) => ({ isOpen: !s.isOpen })),
+      setOpen: (open) => set({ isOpen: open }),
+      togglePinned: () => set((s) => ({ isPinned: !s.isPinned })),
+      setActiveTab: (tab) =>
+        set({ activeTab: tab, usdSize: String(MARKETS[tab].minQuote) }),
+      updatePrice: (tick) =>
+        set((s) => ({ prices: { ...s.prices, [tick.symbol]: tick } })),
+      setUsdSize: (size) => set({ usdSize: size }),
+    }),
+    {
+      name: 'lighter-widget',
+      // Only persist user preferences, not transient state like prices
+      partialize: (state) => ({
+        isPinned: state.isPinned,
+        activeTab: state.activeTab,
+        usdSize: state.usdSize,
+      }),
+    },
+  ),
+)
