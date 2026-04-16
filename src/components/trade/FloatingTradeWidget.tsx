@@ -1,7 +1,7 @@
 // ── Floating Trade Widget — Compact 3-Row Layout ────────────
 'use client'
 import { useCallback, useRef } from 'react'
-import { TrendingUp, X } from 'lucide-react'
+import { TrendingUp, X, Pin, PinOff } from 'lucide-react'
 import { useWidgetStore } from '@/store/widget-store'
 import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
@@ -11,7 +11,7 @@ import { PairTabs } from './PairTabs'
 import { MARKETS } from '@/lib/constants'
 
 export function FloatingTradeWidget() {
-  const { isOpen, activeTab, usdSize, prices, toggleWidget, setActiveTab, setUsdSize } =
+  const { isOpen, isPinned, activeTab, usdSize, prices, toggleWidget, togglePinned, setActiveTab, setUsdSize } =
     useWidgetStore()
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
   const { placeTrade, closeAll, isTrading, isClosing } = useTradeExecution()
@@ -63,13 +63,27 @@ export function FloatingTradeWidget() {
                 Lighter
               </span>
             </div>
-            <button
-              onClick={toggleWidget}
-              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500"
-              aria-label="Close widget"
-            >
-              <X size={12} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={togglePinned}
+                className={`p-0.5 rounded transition-colors ${
+                  isPinned
+                    ? 'text-emerald-400 hover:bg-emerald-500/15'
+                    : 'text-zinc-500 hover:bg-zinc-800'
+                }`}
+                aria-label={isPinned ? 'Unpin widget' : 'Pin widget'}
+                title={isPinned ? 'Unpin widget (allow repositioning)' : 'Pin widget (lock position)'}
+              >
+                {isPinned ? <Pin size={12} /> : <PinOff size={12} />}
+              </button>
+              <button
+                onClick={toggleWidget}
+                className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500"
+                aria-label="Close widget"
+              >
+                <X size={12} />
+              </button>
+            </div>
           </div>
 
           <div className="p-3 space-y-2.5">

@@ -1,6 +1,7 @@
 // ── Lighter REST API Client (server-side) ──────────────────
 import { API_BASE, MARKETS } from './constants'
-import { generateAuthToken, getKeyConfig } from './lighter-keys'
+import { generateAuthToken, getKeyConfig, getSignerClient } from './lighter-keys'
+import { createLogger } from './logger'
 import type {
   AccountData,
   MarketSymbol,
@@ -14,13 +15,30 @@ function authHeaders(): HeadersInit {
 
 // ── Read: positions + balance ───────────────────────────────
 
-export async function fetchAccountData(): Promise<AccountData> {
+export async function fetchAccountData(cid?: string): Promise<AccountData> {
+  const log = createLogger(cid ?? 'no-cid')
   const { accountIndex } = getKeyConfig()
-  const res = await fetch(
-    `${API_BASE}/api/v1/account?by=index&value=${accountIndex}`,
-    { headers: authHeaders(), cache: 'no-store' },
-  )
-  if (!res.ok) throw new Error(`Account fetch failed: ${res.status}`)
+  const url = `${API_BASE}/api/v1/account?by=index&value=${accountIndex}`
+
+  const start = performance.now()
+  log.debug('lighter_api.fetch_account.start', { accountIndex })
+
+  const res = await fetch(url, {
+    headers: authHeaders(),
+    cache: 'no-store',
+  })
+
+  const durationMs = Math.round(performance.now() - start)
+
+  if (!res.ok) {
+    log.error('lighter_api.fetch_account.error', {
+      status: res.status,
+      statusText: res.statusText,
+      durationMs,
+    })
+    throw new Error(`Account fetch failed: ${res.status}`)
+  }
+
   const raw = await res.json()
 
   // API wraps the account data inside { accounts: [...] }
@@ -30,6 +48,12 @@ export async function fetchAccountData(): Promise<AccountData> {
   const aggregatePnl = positions
     .reduce((sum, p) => sum + parseFloat(p.pnl || '0'), 0)
     .toFixed(2)
+
+  log.debug('lighter_api.fetch_account.complete', {
+    status: res.status,
+    durationMs,
+    positionCount: positions.length,
+  })
 
   return {
     balance: {
@@ -71,41 +95,104 @@ export async function placeMarketOrder(
   marketIndex: number,
   isAsk: boolean,
   baseAmount: number,
+  cid?: string,
+  reduceOnly = false,
 ): Promise<TradeResponse> {
-  const body = JSON.stringify({
-    market_index: marketIndex,
-    is_ask: isAsk,
-    base_amount: baseAmount,
-    order_type: 'MARKET',
+  const log = createLogger(cid ?? 'no-cid')
+  const start = performance.now()
+
+  log.info('lighter_sdk.create_market_order.start', {
+    marketIndex,
+    isAsk,
+    baseAmount,
+    reduceOnly,
   })
-  const res = await fetch(`${API_BASE}/api/v1/sendTx`, {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body,
-  })
-  const data = await res.json()
-  if (!res.ok) return { success: false, error: data.message ?? 'Order failed' }
-  return { success: true, txHash: data.tx_hash }
+
+  try {
+    const client = getSignerClient()
+    const [order, respSendTx, error] = await client.create_market_order(
+      marketIndex,
+      0,              // client_order_index
+      baseAmount,
+      0,              // avg_execution_price — 0 = no price constraint for market orders
+      isAsk,
+      reduceOnly,
+    )
+
+    const durationMs = Math.round(performance.now() - start)
+
+    if (error) {
+      log.error('lighter_sdk.create_market_order.error', {
+        durationMs,
+        error,
+        marketIndex,
+        isAsk,
+        baseAmount,
+        reduceOnly,
+      })
+      return { success: false, error }
+    }
+
+    const txHash = respSendTx?.tx_hash
+    log.info('lighter_sdk.create_market_order.success', {
+      durationMs,
+      txHash,
+      marketIndex,
+      isAsk,
+      baseAmount,
+      reduceOnly,
+    })
+
+    return { success: true, txHash }
+  } catch (err) {
+    const durationMs = Math.round(performance.now() - start)
+    const message = err instanceof Error ? err.message : 'SDK order failed'
+    log.error('lighter_sdk.create_market_order.exception', {
+      durationMs,
+      error: message,
+      marketIndex,
+      isAsk,
+      baseAmount,
+      reduceOnly,
+    })
+    return { success: false, error: message }
+  }
 }
 
 // ── Write: close position ───────────────────────────────────
 
 export async function closePosition(
   marketIndex: number,
+  cid?: string,
 ): Promise<TradeResponse> {
+  const log = createLogger(cid ?? 'no-cid')
+
   // Close = place opposite market order for full size
-  const account = await fetchAccountData()
+  const account = await fetchAccountData(cid)
   const pos = account.positions.find((p) => p.marketIndex === marketIndex)
-  if (!pos) return { success: false, error: 'No open position' }
+
+  if (!pos) {
+    log.warn('lighter_api.close_position.no_position', { marketIndex })
+    return { success: false, error: 'No open position' }
+  }
 
   const isAsk = pos.side === 'long' // sell to close long
   const size = Math.abs(parseFloat(pos.size))
-  return placeMarketOrder(marketIndex, isAsk, size)
+
+  log.info('lighter_api.close_position', {
+    marketIndex,
+    symbol: pos.symbol,
+    side: pos.side,
+    size,
+    isAsk,
+  })
+
+  return placeMarketOrder(marketIndex, isAsk, size, cid, true)
 }
 
-export async function closeAllPositions(): Promise<TradeResponse[]> {
-  const account = await fetchAccountData()
+export async function closeAllPositions(cid?: string): Promise<TradeResponse[]> {
+  const account = await fetchAccountData(cid)
   return Promise.all(
-    account.positions.map((p) => closePosition(p.marketIndex)),
+    account.positions.map((p) => closePosition(p.marketIndex, cid)),
   )
 }
