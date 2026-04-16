@@ -21,3 +21,15 @@ npm-debug.log*
 # TODO tracking
 TODO.md
 TODO_meta.json
+
+# electron
+dist-electron/
+dist/
+*.dmg
+*.AppImage
+*.exe
+
+# lighter daemon
+.lighter.pid
+.lighter.log
+.lighter-launchd.log

@@ -74,16 +74,32 @@ case "${1:-start}" in
     fi
     ;;
 
+  autostart-on)
+    PLIST="$PROJECT_DIR/com.lighter-majors.plist"
+    cp "$PLIST" ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.lighter-majors.plist 2>/dev/null || true
+    echo "✅ Lighter will auto-start on login"
+    echo "   To disable: lighter autostart-off"
+    ;;
+
+  autostart-off)
+    launchctl unload ~/Library/LaunchAgents/com.lighter-majors.plist 2>/dev/null || true
+    rm -f ~/Library/LaunchAgents/com.lighter-majors.plist
+    echo "🛑 Auto-start disabled"
+    ;;
+
   *)
-    echo "Usage: lighter [dev|build|start|stop|status]"
+    echo "Usage: lighter [dev|build|start|stop|status|autostart-on|autostart-off]"
     echo ""
     echo "Commands:"
-    echo "  start          Start production server (default)"
-    echo "  start --daemon Start in background"
-    echo "  dev            Start dev server with hot-reload"
-    echo "  build          Build for production"
-    echo "  stop           Stop background server"
-    echo "  status         Check if server is running"
+    echo "  start            Start production server (default)"
+    echo "  start --daemon   Start in background"
+    echo "  dev              Start dev server with hot-reload"
+    echo "  build            Build for production"
+    echo "  stop             Stop background server"
+    echo "  status           Check if server is running"
+    echo "  autostart-on     Enable auto-start on macOS login"
+    echo "  autostart-off    Disable auto-start on macOS login"
     exit 1
     ;;
 esac

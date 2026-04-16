@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lighter-majors</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/nachobergantinos/Desktop/Trabajo/personal/lighter-majors/bin/lighter</string>
+        <string>start</string>
+        <string>--daemon</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/nachobergantinos/Desktop/Trabajo/personal/lighter-majors</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/nachobergantinos/.nvm/versions/node/v22.6.0/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/nachobergantinos/Desktop/Trabajo/personal/lighter-majors/.lighter-launchd.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/nachobergantinos/Desktop/Trabajo/personal/lighter-majors/.lighter-launchd.log</string>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+</dict>
+</plist>

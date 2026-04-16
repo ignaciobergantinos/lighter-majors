@@ -9,6 +9,8 @@ interface TradeParams {
   side: 'long' | 'short'
   /** Base amount to trade. Falls back to market minimum if omitted. */
   baseAmount?: number
+  /** Current mark price — forwarded for Discord notification context. */
+  markPrice?: number
 }
 
 async function executeTrade(params: TradeParams): Promise<TradeResponse> {
@@ -20,6 +22,7 @@ async function executeTrade(params: TradeParams): Promise<TradeResponse> {
       marketIndex: market.marketIndex,
       side: params.side,
       ...(params.baseAmount != null && { baseAmount: params.baseAmount }),
+      ...(params.markPrice != null && { markPrice: params.markPrice }),
     }),
   })
   return res.json()
