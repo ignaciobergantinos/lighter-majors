@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  // koffi is a native FFI binary used by zklighter-sdk for signing.
+  // It must stay server-side — webpack cannot bundle .node files.
+  // Next.js 14 uses this key (renamed to serverExternalPackages in v15)
+  experimental: {
+    serverComponentsExternalPackages: ['koffi', 'zklighter-sdk'],
+  },
+};
 
 // ── Startup env-var check ──────────────────────────────────
 // Warns at build / dev-server start if required vars are missing.

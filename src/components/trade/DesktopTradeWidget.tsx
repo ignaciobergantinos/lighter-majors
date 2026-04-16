@@ -1,4 +1,5 @@
 // ── Desktop Trade Widget — Full-window, no FAB ─────────────
+// Responsive layout that adapts to very small viewport sizes
 'use client'
 import { useCallback, useRef } from 'react'
 import { useWidgetStore } from '@/store/widget-store'
@@ -6,6 +7,7 @@ import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
 import { usePriceFeed } from '@/hooks/usePriceFeed'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useViewportSize } from '@/hooks/useViewportSize'
 import { PairTabs } from './PairTabs'
 import { DesktopTitleBar } from './DesktopTitleBar'
 import { MARKETS } from '@/lib/constants'
@@ -16,6 +18,7 @@ export function DesktopTradeWidget() {
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
   const { placeTrade, closeAll, isTrading, isClosing } = useTradeExecution()
   const sizeInputRef = useRef<HTMLInputElement>(null)
+  const { isUltraCompact, isCompact, isShortHeight } = useViewportSize()
 
   usePriceFeed()
   useKeyboardShortcuts()
@@ -51,14 +54,15 @@ export function DesktopTradeWidget() {
   return (
     <div className="flex flex-col h-screen bg-zinc-950/95 rounded-2xl overflow-hidden border border-zinc-800/50">
       {/* ── Draggable Titlebar ─────────────────────────── */}
-      <DesktopTitleBar />
+      <DesktopTitleBar compact={isCompact} />
 
       {/* ── Trade Panel ────────────────────────────────── */}
-      <div className="flex-1 p-3 space-y-2.5">
-        {/* Row 1: USD Size Input | Symbol Selector */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-zinc-500 pointer-events-none">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-1.5 sm:space-y-2.5">
+        {/* Row 1: USD Size Input | Symbol Selector
+            Stacks vertically at ultra-compact widths */}
+        <div className={`flex gap-1.5 sm:gap-2 ${isUltraCompact ? 'flex-col' : 'items-center'}`}>
+          <div className="relative flex-1 min-w-0">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-500 pointer-events-none">
               $
             </span>
             <input
@@ -72,7 +76,7 @@ export function DesktopTradeWidget() {
               onFocus={(e) => e.target.select()}
               placeholder={String(market.minQuote)}
               aria-label={`Trade size in USD (min $${market.minQuote})`}
-              className="w-full pl-6 pr-3 py-2 text-sm font-medium
+              className="w-full pl-5 pr-2 py-1.5 sm:py-2 text-xs sm:text-sm font-medium
                          bg-zinc-900 border border-zinc-800 rounded-lg
                          text-zinc-100 placeholder:text-zinc-600
                          focus:outline-none focus:border-zinc-600
@@ -81,62 +85,71 @@ export function DesktopTradeWidget() {
                          [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
-          <PairTabs active={activeTab} onSelect={setActiveTab} compact />
+          <PairTabs
+            active={activeTab}
+            onSelect={setActiveTab}
+            compact
+            ultraCompact={isUltraCompact}
+          />
         </div>
 
-        {/* Row 2: Buy | Short | Close All */}
-        <div className="grid grid-cols-3 gap-1.5">
+        {/* Row 2: Buy | Short | Close All
+            At ultra-compact width, stack Buy/Short on one row, Close All below */}
+        <div className={`grid gap-1 sm:gap-1.5 ${isUltraCompact ? 'grid-cols-2' : 'grid-cols-3'}`}>
           <button
             onClick={() => handleTrade('long')}
             disabled={isTrading}
-            className="py-2 text-xs font-bold rounded-lg
+            className="py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-lg
                        bg-emerald-500/15 text-emerald-400 border border-emerald-500/30
                        hover:bg-emerald-500/25 active:scale-[0.97]
-                       disabled:opacity-40 transition-all"
+                       disabled:opacity-40 transition-all truncate"
           >
             {isTrading ? '...' : 'Buy'}
           </button>
           <button
             onClick={() => handleTrade('short')}
             disabled={isTrading}
-            className="py-2 text-xs font-bold rounded-lg
+            className="py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-lg
                        bg-red-500/15 text-red-400 border border-red-500/30
                        hover:bg-red-500/25 active:scale-[0.97]
-                       disabled:opacity-40 transition-all"
+                       disabled:opacity-40 transition-all truncate"
           >
             {isTrading ? '...' : 'Short'}
           </button>
           <button
             onClick={() => closeAll()}
             disabled={isClosing || !hasPositions}
-            className="py-2 text-xs font-bold rounded-lg
+            className={`py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-lg
                        bg-zinc-800 text-zinc-400 border border-zinc-700
                        hover:bg-zinc-700 hover:text-zinc-300
-                       disabled:opacity-30 transition-all"
+                       disabled:opacity-30 transition-all truncate
+                       ${isUltraCompact ? 'col-span-2' : ''}`}
           >
-            {isClosing ? '...' : 'Close All'}
+            {isClosing ? '...' : 'Close'}
           </button>
         </div>
 
-        {/* Row 3: Balance | PnL */}
-        {!isLoading && (
-          <div className="flex items-center justify-between px-1 py-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-zinc-600 uppercase tracking-wide">
+        {/* Row 3: Balance | PnL — hidden at very short heights */}
+        {!isLoading && !isShortHeight && (
+          <div className={`flex items-center px-0.5 py-0.5 sm:px-1 sm:py-1 ${
+            isCompact ? 'flex-col items-start gap-0.5' : 'justify-between'
+          }`}>
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <span className="text-[9px] sm:text-[10px] text-zinc-600 uppercase tracking-wide">
                 Bal
               </span>
-              <span className="text-xs font-medium text-zinc-300">
+              <span className="text-[10px] sm:text-xs font-medium text-zinc-300">
                 {balance
                   ? `$${parseFloat(balance.availableBalance).toFixed(2)}`
                   : '---'}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-zinc-600 uppercase tracking-wide">
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <span className="text-[9px] sm:text-[10px] text-zinc-600 uppercase tracking-wide">
                 PnL
               </span>
               <span
-                className={`text-xs font-semibold ${
+                className={`text-[10px] sm:text-xs font-semibold ${
                   hasPositions
                     ? isProfit
                       ? 'text-emerald-400'

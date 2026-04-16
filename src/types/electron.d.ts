@@ -4,6 +4,7 @@ interface ElectronAPI {
   minimizeToTray: () => void
   quit: () => void
   isElectron: true
+  platform: NodeJS.Platform
 }
 
 declare global {
