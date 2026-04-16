@@ -2,8 +2,9 @@
 // Adapts to compact widths by hiding brand text
 // Offsets content on macOS to avoid overlapping traffic-light buttons
 'use client'
-import { Minus, X, TrendingUp } from 'lucide-react'
+import { Minus, X, TrendingUp, Pin, PinOff } from 'lucide-react'
 import { getElectronAPI } from '@/hooks/useElectron'
+import { useWidgetStore } from '@/store/widget-store'
 
 /** Width reserved for macOS traffic-light buttons (close/minimize/maximize) */
 const MACOS_TRAFFIC_LIGHT_WIDTH = 70
@@ -16,6 +17,7 @@ interface DesktopTitleBarProps {
 export function DesktopTitleBar({ compact }: DesktopTitleBarProps) {
   const api = getElectronAPI()
   const isMac = api?.platform === 'darwin'
+  const { isPinned, togglePinned } = useWidgetStore()
 
   return (
     <div
@@ -41,6 +43,18 @@ export function DesktopTitleBar({ compact }: DesktopTitleBarProps) {
         className="flex items-center gap-0.5 sm:gap-1 shrink-0"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        <button
+          onClick={togglePinned}
+          className={`p-0.5 sm:p-1 rounded transition-colors ${
+            isPinned
+              ? 'text-emerald-400 hover:bg-emerald-500/15'
+              : 'text-zinc-500 hover:bg-zinc-800'
+          }`}
+          aria-label={isPinned ? 'Unpin widget' : 'Pin widget'}
+          title={isPinned ? 'Unpin (allow repositioning)' : 'Pin (lock position)'}
+        >
+          {isPinned ? <Pin size={12} /> : <PinOff size={12} />}
+        </button>
         <button
           onClick={() => api?.minimizeToTray()}
           className="p-0.5 sm:p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
