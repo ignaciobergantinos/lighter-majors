@@ -1,6 +1,6 @@
 // ── POST /api/trade — place a market order ──────────────────
 import { NextRequest, NextResponse } from 'next/server'
-import { placeMarketOrder } from '@/lib/lighter-client'
+import { placeMarketOrder, fetchAccountData } from '@/lib/lighter-client'
 import { MARKETS } from '@/lib/constants'
 import { notifyPositionOpen } from '@/lib/discord-notifier'
 import { correlationId, createLogger, withTiming } from '@/lib/logger'
@@ -25,10 +25,21 @@ export async function POST(req: NextRequest) {
     }
 
     const isAsk = side === 'short'
-    const baseAmount =
-      typeof customBaseAmount === 'number' && customBaseAmount >= market.minBaseAmount
-        ? customBaseAmount
-        : market.minBaseAmount
+
+    // Resolve base amount: use explicit value, or compute from usdSize / markPrice
+    let baseAmount: number
+    if (typeof customBaseAmount === 'number' && customBaseAmount >= market.minBaseAmount) {
+      baseAmount = customBaseAmount
+    } else if (
+      typeof requestUsdSize === 'number' && requestUsdSize > 0 &&
+      typeof markPrice === 'number' && markPrice > 0
+    ) {
+      const computed = requestUsdSize / markPrice
+      const rounded = parseFloat(computed.toFixed(market.sizeDecimals))
+      baseAmount = rounded >= market.minBaseAmount ? rounded : market.minBaseAmount
+    } else {
+      baseAmount = market.minBaseAmount
+    }
 
     const result = await withTiming(
       log,
@@ -46,13 +57,34 @@ export async function POST(req: NextRequest) {
     const usdSize = typeof requestUsdSize === 'number' && requestUsdSize > 0
       ? requestUsdSize
       : price ? baseAmount * price : undefined
-    notifyPositionOpen({
-      marketIndex,
-      side,
-      baseAmount,
-      usdSize,
-      price,
-    })
+
+    // Fire-and-forget: wait for exchange to settle, then send accurate notification.
+    // Detached so the trade API response returns immediately.
+    void (async () => {
+      let filledUsd: number | undefined
+      try {
+        // Give the exchange time to settle the trade
+        await new Promise((r) => setTimeout(r, 1500))
+        const account = await fetchAccountData(cid)
+        const pos = account.positions.find((p) => p.marketIndex === marketIndex)
+        if (pos) {
+          const posSize = Math.abs(parseFloat(pos.size || '0'))
+          const entryPrice = parseFloat(pos.entryPrice || '0')
+          filledUsd = entryPrice > 0 ? posSize * entryPrice : undefined
+        }
+      } catch {
+        // Non-fatal — send notification without filled size
+      }
+
+      notifyPositionOpen({
+        marketIndex,
+        side,
+        baseAmount,
+        usdSize,
+        price,
+        filledUsd,
+      })
+    })()
 
     return NextResponse.json(result)
   } catch (error) {

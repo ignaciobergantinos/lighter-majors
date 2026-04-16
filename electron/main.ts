@@ -226,6 +226,8 @@ ipcMain.on('preferences:save', (_event, prefs: UserPreferences) => {
 
 // ── Global Shortcuts (system-wide, work even when app is not focused) ──
 const API_URL = 'http://localhost:3000'
+const LIGHTER_API = 'https://mainnet.zklighter.elliot.ai'
+const PRICE_POLL_MS = 60_000 // 1 minute
 
 // Market config mirrored from constants.ts (main process can't import renderer code)
 const MARKETS: Record<string, { marketIndex: number; minBaseAmount: number; sizeDecimals: number; priceDecimals: number }> = {
@@ -237,8 +239,87 @@ const MARKETS: Record<string, { marketIndex: number; minBaseAmount: number; size
 // Cached widget state from renderer — updated via IPC
 let widgetState = { activeTab: 'BTC', usdSize: '10', markPrice: 0 }
 
+// Cached prices per symbol — fetched independently from Lighter REST API
+const cachedPrices: Record<string, number> = { BTC: 0, ETH: 0, SOL: 0 }
+let pricePollTimer: ReturnType<typeof setInterval> | null = null
+
+/** Fetch the current mark price for a symbol from the Lighter REST API */
+async function fetchPrice(symbol: string): Promise<number> {
+  const market = MARKETS[symbol]
+  if (!market) return 0
+
+  try {
+    const url = `${LIGHTER_API}/api/v1/orderBookDetails?market_id=${market.marketIndex}`
+    const res = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!res.ok) {
+      console.error(`[price-feed] fetch failed for ${symbol}: ${res.status}`)
+      return cachedPrices[symbol] || 0
+    }
+    const data = await res.json()
+    const details = data.order_book_details?.[0] ?? data
+    const price = parseFloat(details.mark_price ?? details.last_trade_price ?? '0')
+    if (price > 0) {
+      cachedPrices[symbol] = price
+      console.log(`[price-feed] ${symbol} = $${price}`)
+    }
+    return price
+  } catch (err) {
+    console.error(`[price-feed] error fetching ${symbol}:`, err instanceof Error ? err.message : err)
+    return cachedPrices[symbol] || 0
+  }
+}
+
+/** Fetch price for the currently selected symbol */
+async function fetchActivePrice(): Promise<void> {
+  const symbol = widgetState.activeTab
+  const price = await fetchPrice(symbol)
+  if (price > 0) {
+    widgetState.markPrice = price
+  }
+}
+
+/** Fetch prices for all symbols (used on startup) */
+async function fetchAllPrices(): Promise<void> {
+  await Promise.all(Object.keys(MARKETS).map(fetchPrice))
+  // Update widgetState with the active symbol's price
+  const activePrice = cachedPrices[widgetState.activeTab]
+  if (activePrice > 0) {
+    widgetState.markPrice = activePrice
+  }
+}
+
+/** Start polling prices every minute */
+function startPricePolling(): void {
+  if (pricePollTimer) clearInterval(pricePollTimer)
+  // Fetch immediately on start
+  fetchAllPrices()
+  // Then poll every minute
+  pricePollTimer = setInterval(fetchActivePrice, PRICE_POLL_MS)
+}
+
 ipcMain.on('widget:state-sync', (_event, state: { activeTab: string; usdSize: string; markPrice?: number }) => {
+  const prevTab = widgetState.activeTab
   widgetState = { ...widgetState, ...state }
+
+  // If renderer sends a valid price, update our cache too
+  if (state.markPrice && state.markPrice > 0) {
+    cachedPrices[widgetState.activeTab] = state.markPrice
+  }
+
+  // On symbol change: use cached price immediately, then refresh from API
+  if (state.activeTab && state.activeTab !== prevTab) {
+    const cached = cachedPrices[state.activeTab]
+    if (cached > 0) {
+      widgetState.markPrice = cached
+    }
+    // Fetch fresh price in background
+    fetchActivePrice()
+  }
+
+  // On size change: ensure we have a price (fetch if missing)
+  if (widgetState.markPrice <= 0) {
+    fetchActivePrice()
+  }
 })
 
 function fireTrade(side: 'long' | 'short'): void {
@@ -248,12 +329,17 @@ function fireTrade(side: 'long' | 'short'): void {
     return
   }
 
-  // Convert USD size to base amount using mark price
+  // Use our own cached price (more reliable than renderer sync)
   const usdSize = parseFloat(widgetState.usdSize) || 0
-  const price = widgetState.markPrice || 0
-  const baseAmount = price > 0 ? usdSize / price : undefined
+  const price = widgetState.markPrice || cachedPrices[widgetState.activeTab] || 0
+  let baseAmount: number | undefined
+  if (price > 0 && usdSize > 0) {
+    const raw = usdSize / price
+    const rounded = parseFloat(raw.toFixed(market.sizeDecimals))
+    baseAmount = rounded >= market.minBaseAmount ? rounded : undefined
+  }
 
-  console.log(`[global-shortcut] ${side.toUpperCase()} ${widgetState.activeTab} — $${usdSize} (~${baseAmount?.toFixed(market.sizeDecimals) ?? 'min'} ${widgetState.activeTab})`)
+  console.log(`[global-shortcut] ${side.toUpperCase()} ${widgetState.activeTab} — $${usdSize} @ $${price} (~${baseAmount?.toFixed(market.sizeDecimals) ?? 'min'} ${widgetState.activeTab})`)
 
   fetch(`${API_URL}/api/trade`, {
     method: 'POST',
@@ -261,7 +347,7 @@ function fireTrade(side: 'long' | 'short'): void {
     body: JSON.stringify({
       marketIndex: market.marketIndex,
       side,
-      ...(baseAmount != null && baseAmount >= market.minBaseAmount && { baseAmount }),
+      ...(baseAmount != null && { baseAmount }),
       ...(usdSize > 0 && { usdSize }),
       ...(price > 0 && { markPrice: price }),
     }),
@@ -348,6 +434,7 @@ app.whenReady().then(() => {
   createTray()
   createWindow()
   registerGlobalShortcuts()
+  startPricePolling() // Fetch prices on startup + poll every 60s
 
   app.on('activate', () => {
     if (mainWindow === null) {
@@ -366,4 +453,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  if (pricePollTimer) clearInterval(pricePollTimer)
 })

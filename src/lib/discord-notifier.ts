@@ -52,13 +52,24 @@ export function notifyPositionOpen(params: {
   baseAmount: number
   usdSize?: number
   price?: number
+  filledUsd?: number
 }): void {
   const symbol = resolveSymbol(params.marketIndex)
   const sideLabel = params.side === 'long' ? 'LONG' : 'SHORT'
   const emoji = params.side === 'long' ? '🟢' : '🔴'
 
-  const usd = params.usdSize ?? (params.price ? params.baseAmount * params.price : null)
-  const message = `${emoji} **[Lighter] ${sideLabel} ${symbol}** — ${usd !== null ? `$${usd.toFixed(2)}` : `${params.baseAmount} ${symbol}`}`
+  const requested = params.usdSize ?? (params.price ? params.baseAmount * params.price : null)
+  const filled = params.filledUsd
+
+  let sizeText: string
+  if (filled != null && filled > 0) {
+    const requestedText = requested != null ? ` ($${Math.round(requested)})` : ''
+    sizeText = `$${filled.toFixed(2)} FILLED${requestedText}`
+  } else {
+    sizeText = requested != null ? `$${requested.toFixed(2)}` : `${params.baseAmount} ${symbol}`
+  }
+
+  const message = `${emoji} **[Lighter] ${sideLabel} ${symbol}** — ${sizeText}`
 
   // Fire-and-forget — do not await
   void postToDiscord(message)
@@ -85,9 +96,6 @@ export function notifyPositionClose(params: {
 
   const lines = [
     `${closeEmoji} **[Lighter] ${sideLabel} ${position.symbol}** — ${formatUsd(notional)}`,
-    ``,
-    `Entry: ${formatUsd(entryPrice)} → Exit: ${formatUsd(closingPrice)}`,
-    `Size: ${formatUsd(notional)} → ${formatUsd(closeNotional)}`,
     `Profit: ${formatUsd(pnl)} (${formatPercent(pctChange)}) ${profitEmoji(pnl)}`,
   ]
 

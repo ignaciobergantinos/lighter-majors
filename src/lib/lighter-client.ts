@@ -106,15 +106,17 @@ export async function placeMarketOrder(
   const sizeDecimals = market?.sizeDecimals ?? 5
   const baseAmountInt = Math.round(baseAmount * 10 ** sizeDecimals)
 
-  // Max slippage tolerance (0.05 = 5%) — SDK auto-fetches best orderbook price
-  const MAX_SLIPPAGE = 0.05
+  // Use a true market order: set an extreme price so the order sweeps the entire book.
+  // Price format is integer-scaled by priceDecimals (e.g. $2286.47 → 228647 for priceDecimals=2).
+  // Buy: set ceiling very high; Sell: set floor very low.
+  const extremePrice = isAsk ? 1 : 999_999_999
 
   log.debug('lighter_sdk.create_market_order.start', {
     marketIndex,
     isAsk,
     baseAmount,
     baseAmountInt,
-    maxSlippage: MAX_SLIPPAGE,
+    extremePrice,
     reduceOnly,
   })
 
@@ -127,11 +129,11 @@ export async function placeMarketOrder(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const [order, respSendTx, error] = await client.create_market_order_limited_slippage(
+      const [order, respSendTx, error] = await client.create_market_order(
         marketIndex,
         0,              // client_order_index
         baseAmountInt,
-        MAX_SLIPPAGE,   // max slippage — SDK fetches orderbook price and applies this tolerance
+        extremePrice,   // extreme price to sweep the full orderbook
         isAsk,
         reduceOnly,
       )
