@@ -8,7 +8,7 @@ interface ViewportSize {
   isUltraCompact: boolean
   /** Window width < 320px — compact mode, collapse labels */
   isCompact: boolean
-  /** Window height < 250px — hide non-essential rows */
+  /** Window height < 250px — condensed layout for constrained heights */
   isShortHeight: boolean
 }
 

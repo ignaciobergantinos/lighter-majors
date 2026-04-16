@@ -16,11 +16,14 @@ export async function POST(req: NextRequest) {
       const failed = results.filter((r) => !r.success)
 
       if (failed.length > 0) {
-        return NextResponse.json({
-          success: false,
-          error: `${failed.length} position(s) failed to close`,
-          details: failed,
-        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: `${failed.length} position(s) failed to close`,
+            details: failed,
+          },
+          { status: 422 },
+        )
       }
 
       notifyCloseAll(openPositions)
@@ -40,7 +43,11 @@ export async function POST(req: NextRequest) {
 
     const result = await closePosition(marketIndex)
 
-    if (result.success && position) {
+    if (!result.success) {
+      return NextResponse.json(result, { status: 422 })
+    }
+
+    if (position) {
       notifyPositionClose({ position })
     }
 

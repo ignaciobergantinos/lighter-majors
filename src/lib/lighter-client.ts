@@ -21,7 +21,10 @@ export async function fetchAccountData(): Promise<AccountData> {
     { headers: authHeaders(), cache: 'no-store' },
   )
   if (!res.ok) throw new Error(`Account fetch failed: ${res.status}`)
-  const data = await res.json()
+  const raw = await res.json()
+
+  // API wraps the account data inside { accounts: [...] }
+  const data = raw.accounts?.[0] ?? raw
 
   const positions = parsePositions(data.positions ?? {})
   const aggregatePnl = positions
@@ -39,21 +42,27 @@ export async function fetchAccountData(): Promise<AccountData> {
   }
 }
 
-function parsePositions(raw: Record<string, unknown>): Position[] {
-  const symbolByIndex: Record<number, MarketSymbol> = {}
-  for (const m of Object.values(MARKETS)) {
-    symbolByIndex[m.marketIndex] = m.symbol
-  }
+function parsePositions(raw: unknown[] | Record<string, unknown>): Position[] {
+  const items = Array.isArray(raw) ? raw : Object.values(raw)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Object.values(raw).map((p: any) => ({
-    marketIndex: p.market_index,
-    symbol: symbolByIndex[p.market_index] ?? 'BTC',
-    side: p.side ?? (parseFloat(p.size) >= 0 ? 'long' : 'short'),
-    size: p.size ?? '0',
-    entryPrice: p.entry_price ?? '0',
-    pnl: p.pnl ?? '0',
-  }))
+  return items
+    .filter((p: any) => parseFloat(p.position ?? p.size ?? '0') !== 0)
+    .map((p: any) => {
+      const marketIndex = p.market_id ?? p.market_index
+      const size = p.position ?? p.size ?? '0'
+      const sign = p.sign ?? 1
+      // sign: 1 = long, 0 = short; or infer from size
+      const side = p.side ?? (sign === 1 ? 'long' : 'short')
+      return {
+        marketIndex,
+        symbol: (p.symbol as MarketSymbol) ?? 'BTC',
+        side,
+        size,
+        entryPrice: p.avg_entry_price ?? p.entry_price ?? '0',
+        pnl: p.unrealized_pnl ?? p.pnl ?? '0',
+      }
+    })
 }
 
 // ── Write: place market order ───────────────────────────────

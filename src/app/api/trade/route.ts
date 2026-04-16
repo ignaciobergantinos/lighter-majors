@@ -27,14 +27,16 @@ export async function POST(req: NextRequest) {
 
     const result = await placeMarketOrder(marketIndex, isAsk, baseAmount)
 
-    if (result.success) {
-      notifyPositionOpen({
-        marketIndex,
-        side,
-        baseAmount,
-        price: typeof markPrice === 'number' ? markPrice : undefined,
-      })
+    if (!result.success) {
+      return NextResponse.json(result, { status: 422 })
     }
+
+    notifyPositionOpen({
+      marketIndex,
+      side,
+      baseAmount,
+      price: typeof markPrice === 'number' ? markPrice : undefined,
+    })
 
     return NextResponse.json(result)
   } catch (error) {

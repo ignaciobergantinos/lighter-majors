@@ -129,27 +129,31 @@ export function DesktopTradeWidget() {
           </button>
         </div>
 
-        {/* Row 3: Balance | PnL — hidden at very short heights */}
-        {!isLoading && !isShortHeight && (
-          <div className={`flex items-center px-0.5 py-0.5 sm:px-1 sm:py-1 ${
-            isCompact ? 'flex-col items-start gap-0.5' : 'justify-between'
+        {/* Row 3: Balance | PnL — always visible, condensed at short heights */}
+        {!isLoading && (
+          <div className={`flex items-center ${
+            isShortHeight
+              ? 'gap-2 px-0.5 py-0'
+              : `px-0.5 py-0.5 sm:px-1 sm:py-1 ${
+                  isCompact ? 'flex-col items-start gap-0.5' : 'justify-between'
+                }`
           }`}>
             <div className="flex items-center gap-1 sm:gap-1.5">
-              <span className="text-[9px] sm:text-[10px] text-zinc-600 uppercase tracking-wide">
+              <span className={`${isShortHeight ? 'text-[8px]' : 'text-[9px] sm:text-[10px]'} text-zinc-600 uppercase tracking-wide`}>
                 Bal
               </span>
-              <span className="text-[10px] sm:text-xs font-medium text-zinc-300">
+              <span className={`${isShortHeight ? 'text-[9px]' : 'text-[10px] sm:text-xs'} font-medium text-zinc-300`}>
                 {balance
                   ? `$${parseFloat(balance.availableBalance).toFixed(2)}`
                   : '---'}
               </span>
             </div>
             <div className="flex items-center gap-1 sm:gap-1.5">
-              <span className="text-[9px] sm:text-[10px] text-zinc-600 uppercase tracking-wide">
+              <span className={`${isShortHeight ? 'text-[8px]' : 'text-[9px] sm:text-[10px]'} text-zinc-600 uppercase tracking-wide`}>
                 PnL
               </span>
               <span
-                className={`text-[10px] sm:text-xs font-semibold ${
+                className={`${isShortHeight ? 'text-[9px]' : 'text-[10px] sm:text-xs'} font-semibold ${
                   hasPositions
                     ? isProfit
                       ? 'text-emerald-400'

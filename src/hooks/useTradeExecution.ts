@@ -13,6 +13,15 @@ interface TradeParams {
   markPrice?: number
 }
 
+/** Parse response and throw on failure so React Query triggers onError. */
+async function parseTradeResponse(res: Response): Promise<TradeResponse> {
+  const data: TradeResponse = await res.json()
+  if (!res.ok || !data.success) {
+    throw new Error(data.error ?? `Trade request failed (${res.status})`)
+  }
+  return data
+}
+
 async function executeTrade(params: TradeParams): Promise<TradeResponse> {
   const market = MARKETS[params.symbol]
   const res = await fetch('/api/trade', {
@@ -25,7 +34,7 @@ async function executeTrade(params: TradeParams): Promise<TradeResponse> {
       ...(params.markPrice != null && { markPrice: params.markPrice }),
     }),
   })
-  return res.json()
+  return parseTradeResponse(res)
 }
 
 async function executeCloseAll(): Promise<TradeResponse> {
@@ -34,7 +43,7 @@ async function executeCloseAll(): Promise<TradeResponse> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ closeAll: true }),
   })
-  return res.json()
+  return parseTradeResponse(res)
 }
 
 async function executeClose(marketIndex: number): Promise<TradeResponse> {
@@ -43,7 +52,7 @@ async function executeClose(marketIndex: number): Promise<TradeResponse> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ marketIndex }),
   })
-  return res.json()
+  return parseTradeResponse(res)
 }
 
 export function useTradeExecution() {

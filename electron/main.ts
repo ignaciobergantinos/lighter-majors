@@ -1,10 +1,14 @@
 // ── Electron Main Process — Floating Desktop Widget ─────────
 import { app, BrowserWindow, Tray, Menu, nativeImage, screen, ipcMain } from 'electron'
 import * as path from 'path'
+import {
+  loadWindowState,
+  saveWindowState,
+  clearWindowState,
+  getDefaultBounds,
+} from './window-state'
 
 // ── Config ──────────────────────────────────────────────────
-const WIDGET_WIDTH = 420
-const WIDGET_HEIGHT = 680
 const DEV_SERVER_URL = 'http://localhost:3000/desktop'
 const IS_DEV = !app.isPackaged
 
@@ -26,14 +30,14 @@ if (!gotLock) {
 
 // ── Create Main Window ──────────────────────────────────────
 function createWindow(): void {
-  const { width: screenWidth, height: screenHeight } =
-    screen.getPrimaryDisplay().workAreaSize
+  // Restore saved position + dimensions, or fall back to defaults
+  const savedBounds = loadWindowState()
 
   mainWindow = new BrowserWindow({
-    width: WIDGET_WIDTH,
-    height: WIDGET_HEIGHT,
-    x: screenWidth - WIDGET_WIDTH - 24,
-    y: screenHeight - WIDGET_HEIGHT - 24,
+    width: savedBounds.width,
+    height: savedBounds.height,
+    x: savedBounds.x,
+    y: savedBounds.y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -58,6 +62,21 @@ function createWindow(): void {
       sandbox: true,
     },
   })
+
+  // ── Persist position + dimensions on move / resize ───────
+  // Use a debounce timer to avoid writing to disk on every pixel
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+  const debouncedSave = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        saveWindowState(mainWindow.getBounds())
+      }
+    }, 500)
+  }
+
+  mainWindow.on('moved', debouncedSave)
+  mainWindow.on('resized', debouncedSave)
 
   // Load the desktop-optimized page
   if (IS_DEV) {
@@ -130,20 +149,19 @@ function createTray(): void {
     {
       label: 'Reset Position',
       click: () => {
-        const { width: sw, height: sh } =
-          screen.getPrimaryDisplay().workAreaSize
-        mainWindow?.setBounds({
-          x: sw - WIDGET_WIDTH - 24,
-          y: sh - WIDGET_HEIGHT - 24,
-          width: WIDGET_WIDTH,
-          height: WIDGET_HEIGHT,
-        })
+        const defaults = getDefaultBounds()
+        mainWindow?.setBounds(defaults)
+        clearWindowState()
       },
     },
     {
       label: 'Reset Size',
       click: () => {
-        mainWindow?.setSize(WIDGET_WIDTH, WIDGET_HEIGHT)
+        const { width, height } = getDefaultBounds()
+        mainWindow?.setSize(width, height)
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          saveWindowState(mainWindow.getBounds())
+        }
       },
     },
     { type: 'separator' },
