@@ -7,6 +7,7 @@ import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
 import { usePriceFeed } from '@/hooks/usePriceFeed'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useAutoSize } from '@/hooks/useAutoSize'
 import { PairTabs } from './PairTabs'
 import { MARKETS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
@@ -21,6 +22,7 @@ export function FloatingTradeWidget() {
 
   usePriceFeed()
   useKeyboardShortcuts()
+  useAutoSize(balance)
 
   const market = MARKETS[activeTab]
   const currentPrice = prices[activeTab]

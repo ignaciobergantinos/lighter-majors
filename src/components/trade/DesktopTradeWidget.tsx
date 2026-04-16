@@ -7,6 +7,7 @@ import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
 import { usePriceFeed } from '@/hooks/usePriceFeed'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useAutoSize } from '@/hooks/useAutoSize'
 import { useViewportSize } from '@/hooks/useViewportSize'
 import { PairTabs } from './PairTabs'
 import { DesktopTitleBar } from './DesktopTitleBar'
@@ -24,6 +25,7 @@ export function DesktopTradeWidget() {
 
   usePriceFeed()
   useKeyboardShortcuts()
+  useAutoSize(balance)
 
   const market = MARKETS[activeTab]
   const currentPrice = prices[activeTab]
