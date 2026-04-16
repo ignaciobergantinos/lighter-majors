@@ -1,0 +1,103 @@
+// ── Lighter REST API Client (server-side) ──────────────────
+import { API_BASE, MARKETS } from './constants'
+import type {
+  AccountData,
+  MarketSymbol,
+  Position,
+  TradeResponse,
+} from './types'
+
+const accountIndex = () => process.env.LIGHTER_ACCOUNT_INDEX ?? '0'
+const authToken = () => process.env.LIGHTER_AUTH_TOKEN ?? ''
+
+function authHeaders(): HeadersInit {
+  return { authorization: authToken() }
+}
+
+// ── Read: positions + balance ───────────────────────────────
+
+export async function fetchAccountData(): Promise<AccountData> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/account?by=index&value=${accountIndex()}`,
+    { headers: authHeaders(), cache: 'no-store' },
+  )
+  if (!res.ok) throw new Error(`Account fetch failed: ${res.status}`)
+  const data = await res.json()
+
+  const positions = parsePositions(data.positions ?? {})
+  const aggregatePnl = positions
+    .reduce((sum, p) => sum + parseFloat(p.pnl || '0'), 0)
+    .toFixed(2)
+
+  return {
+    balance: {
+      availableBalance: data.available_balance ?? '0',
+      collateral: data.collateral ?? '0',
+      totalAssetValue: data.total_asset_value ?? '0',
+    },
+    positions,
+    aggregatePnl,
+  }
+}
+
+function parsePositions(raw: Record<string, unknown>): Position[] {
+  const symbolByIndex: Record<number, MarketSymbol> = {}
+  for (const m of Object.values(MARKETS)) {
+    symbolByIndex[m.marketIndex] = m.symbol
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return Object.values(raw).map((p: any) => ({
+    marketIndex: p.market_index,
+    symbol: symbolByIndex[p.market_index] ?? 'BTC',
+    side: p.side ?? (parseFloat(p.size) >= 0 ? 'long' : 'short'),
+    size: p.size ?? '0',
+    entryPrice: p.entry_price ?? '0',
+    pnl: p.pnl ?? '0',
+  }))
+}
+
+// ── Write: place market order ───────────────────────────────
+
+export async function placeMarketOrder(
+  marketIndex: number,
+  isAsk: boolean,
+  baseAmount: number,
+): Promise<TradeResponse> {
+  const body = JSON.stringify({
+    market_index: marketIndex,
+    is_ask: isAsk,
+    base_amount: baseAmount,
+    order_type: 'MARKET',
+  })
+  const res = await fetch(`${API_BASE}/api/v1/sendTx`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body,
+  })
+  const data = await res.json()
+  if (!res.ok) return { success: false, error: data.message ?? 'Order failed' }
+  return { success: true, txHash: data.tx_hash }
+}
+
+// ── Write: close position ───────────────────────────────────
+
+export async function closePosition(
+  marketIndex: number,
+): Promise<TradeResponse> {
+  // Close = place opposite market order for full size
+  const account = await fetchAccountData()
+  const pos = account.positions.find((p) => p.marketIndex === marketIndex)
+  if (!pos) return { success: false, error: 'No open position' }
+
+  const isAsk = pos.side === 'long' // sell to close long
+  const size = Math.abs(parseFloat(pos.size))
+  return placeMarketOrder(marketIndex, isAsk, size)
+}
+
+export async function closeAllPositions(): Promise<TradeResponse[]> {
+  const account = await fetchAccountData()
+  return Promise.all(
+    account.positions.map((p) => closePosition(p.marketIndex)),
+  )
+}
