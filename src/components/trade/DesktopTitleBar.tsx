@@ -23,7 +23,7 @@ export function DesktopTitleBar({ compact }: DesktopTitleBarProps) {
     <div
       className="flex items-center justify-between px-2 sm:px-3 py-1.5 sm:py-2 border-b border-zinc-800/60 shrink-0"
       style={{
-        WebkitAppRegion: 'drag',
+        WebkitAppRegion: isPinned ? 'no-drag' : 'drag',
         // Reserve space for macOS traffic-light buttons on the left
         paddingLeft: isMac ? MACOS_TRAFFIC_LIGHT_WIDTH : undefined,
       } as React.CSSProperties}
