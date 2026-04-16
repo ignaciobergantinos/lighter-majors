@@ -8,12 +8,12 @@ import { SIZE_MULTIPLIER } from '@/lib/constants'
 import type { AccountBalance } from '@/lib/types'
 
 export function useAutoSize(balance: AccountBalance | null) {
-  const { activeTab, setUsdSize } = useWidgetStore()
+  const { activeTab, autoSizeEnabled, setUsdSize } = useWidgetStore()
   const prevBalanceRef = useRef<string | null>(null)
   const prevTabRef = useRef(activeTab)
 
   useEffect(() => {
-    if (!balance) return
+    if (!balance || !autoSizeEnabled) return
 
     const currentBalance = balance.availableBalance
     const tabChanged = activeTab !== prevTabRef.current
@@ -29,5 +29,5 @@ export function useAutoSize(balance: AccountBalance | null) {
 
     prevBalanceRef.current = currentBalance
     prevTabRef.current = activeTab
-  }, [balance, activeTab, setUsdSize])
+  }, [balance, activeTab, autoSizeEnabled, setUsdSize])
 }

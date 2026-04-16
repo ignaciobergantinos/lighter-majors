@@ -15,7 +15,7 @@ import { MARKETS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
 
 export function DesktopTradeWidget() {
-  const { activeTab, usdSizes, prices, setActiveTab, setUsdSize } =
+  const { activeTab, usdSizes, prices, autoSizeEnabled, setActiveTab, setUsdSize, toggleAutoSize } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
@@ -108,6 +108,20 @@ export function DesktopTradeWidget() {
             ultraCompact={isUltraCompact}
           />
         </div>
+
+        {/* Auto-size toggle */}
+        <label className="flex items-center gap-1.5 cursor-pointer select-none px-0.5">
+          <input
+            type="checkbox"
+            checked={autoSizeEnabled}
+            onChange={toggleAutoSize}
+            className="w-3 h-3 rounded border-zinc-700 bg-zinc-900 text-emerald-500
+                       accent-emerald-500 cursor-pointer"
+          />
+          <span className="text-[9px] sm:text-[10px] text-zinc-500">
+            Auto-size (48×)
+          </span>
+        </label>
 
         {/* Row 2: Buy | Short | Close All
             At ultra-compact width, stack Buy/Short on one row, Close All below */}

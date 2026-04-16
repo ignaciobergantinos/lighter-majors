@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
       let filledUsd: number | undefined
       try {
         // Give the exchange time to settle the trade
-        await new Promise((r) => setTimeout(r, 1500))
+        // Lighter taker latency: ~300ms (standard) / ~150ms (premium) + API fetch RTT
+        await new Promise((r) => setTimeout(r, 1000))
         const account = await fetchAccountData(cid)
         const pos = account.positions.find((p) => p.marketIndex === marketIndex)
         if (pos) {

@@ -19,6 +19,8 @@ interface WidgetState {
   usdSizes: Record<MarketSymbol, string>
   /** Whether audio feedback is enabled for trade execution */
   soundEnabled: boolean
+  /** Whether USD size auto-calculates from balance × 48 */
+  autoSizeEnabled: boolean
 
   toggleWidget: () => void
   setOpen: (open: boolean) => void
@@ -27,6 +29,7 @@ interface WidgetState {
   updatePrice: (tick: PriceTick) => void
   setUsdSize: (size: string) => void
   toggleSound: () => void
+  toggleAutoSize: () => void
 }
 
 // ── Electron-aware storage adapter ─────────────────────────
@@ -108,6 +111,7 @@ export const useWidgetStore = create<WidgetState>()(
       prices: { BTC: null, ETH: null, SOL: null },
       usdSizes: { ...defaultUsdSizes },
       soundEnabled: true,
+      autoSizeEnabled: true,
 
       toggleWidget: () => set((s) => ({ isOpen: !s.isOpen })),
       setOpen: (open) => set({ isOpen: open }),
@@ -120,6 +124,7 @@ export const useWidgetStore = create<WidgetState>()(
           usdSizes: { ...s.usdSizes, [s.activeTab]: size },
         })),
       toggleSound: () => set((s) => ({ soundEnabled: !s.soundEnabled })),
+      toggleAutoSize: () => set((s) => ({ autoSizeEnabled: !s.autoSizeEnabled })),
     }),
     {
       name: 'lighter-widget',
@@ -130,6 +135,7 @@ export const useWidgetStore = create<WidgetState>()(
         activeTab: state.activeTab,
         usdSizes: state.usdSizes,
         soundEnabled: state.soundEnabled,
+        autoSizeEnabled: state.autoSizeEnabled,
       }),
     },
   ),

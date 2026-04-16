@@ -13,7 +13,7 @@ import { MARKETS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
 
 export function FloatingTradeWidget() {
-  const { isOpen, isPinned, activeTab, usdSizes, prices, toggleWidget, togglePinned, setActiveTab, setUsdSize } =
+  const { isOpen, isPinned, activeTab, usdSizes, prices, autoSizeEnabled, toggleWidget, togglePinned, setActiveTab, setUsdSize, toggleAutoSize } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
@@ -123,6 +123,20 @@ export function FloatingTradeWidget() {
               </div>
               <PairTabs active={activeTab} onSelect={setActiveTab} compact />
             </div>
+
+            {/* Auto-size toggle */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoSizeEnabled}
+                onChange={toggleAutoSize}
+                className="w-3 h-3 rounded border-zinc-700 bg-zinc-900 text-emerald-500
+                           accent-emerald-500 cursor-pointer"
+              />
+              <span className="text-[10px] text-zinc-500">
+                Auto-size (48×)
+              </span>
+            </label>
 
             {/* ── Row 2: Buy | Short | Close All ─────────── */}
             <div className="grid grid-cols-3 gap-1.5">
