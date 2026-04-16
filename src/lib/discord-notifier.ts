@@ -43,9 +43,15 @@ async function postToDiscord(content: string): Promise<void> {
   }
 }
 
+// ── Deduplication ─────────────────────────────────────────
+// Track last notified filledUsd per market to skip duplicate notifications
+// when the filled qty hasn't changed (e.g. order still partially filled).
+const lastNotifiedFill = new Map<number, number>()
+
 // ── Public API ─────────────────────────────────────────────
 
-/** Notify Discord when a position is opened. Fire-and-forget. */
+/** Notify Discord when a position is opened. Fire-and-forget.
+ *  Skips notification if filledUsd is identical to the last one for this market. */
 export function notifyPositionOpen(params: {
   marketIndex: number
   side: 'long' | 'short'
@@ -54,6 +60,15 @@ export function notifyPositionOpen(params: {
   price?: number
   filledUsd?: number
 }): void {
+  // Dedup: skip if filled amount hasn't changed since last notification
+  if (params.filledUsd != null && params.filledUsd > 0) {
+    const prev = lastNotifiedFill.get(params.marketIndex)
+    if (prev != null && Math.abs(prev - params.filledUsd) < 0.01) {
+      console.log(`[discord] skipping duplicate notification for market ${params.marketIndex} — filledUsd unchanged (${params.filledUsd})`)
+      return
+    }
+    lastNotifiedFill.set(params.marketIndex, params.filledUsd)
+  }
   const symbol = resolveSymbol(params.marketIndex)
   const sideLabel = params.side === 'long' ? 'LONG' : 'SHORT'
   const emoji = params.side === 'long' ? '🟢' : '🔴'
@@ -81,6 +96,8 @@ export function notifyPositionClose(params: {
   closingPrice?: number
 }): void {
   const { position } = params
+  // Clear dedup state so next open on this market notifies fresh
+  lastNotifiedFill.delete(position.marketIndex)
   const sideLabel = position.side === 'long' ? 'LONG' : 'SHORT'
   const closeEmoji = '✖️'
 
