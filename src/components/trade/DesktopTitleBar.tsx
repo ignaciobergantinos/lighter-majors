@@ -2,7 +2,7 @@
 // Adapts to compact widths by hiding brand text
 // Offsets content on macOS to avoid overlapping traffic-light buttons
 'use client'
-import { Minus, X, TrendingUp, Pin, PinOff } from 'lucide-react'
+import { Minus, X, TrendingUp, Pin, PinOff, Volume2, VolumeOff } from 'lucide-react'
 import { getElectronAPI } from '@/hooks/useElectron'
 import { useWidgetStore } from '@/store/widget-store'
 
@@ -17,7 +17,7 @@ interface DesktopTitleBarProps {
 export function DesktopTitleBar({ compact }: DesktopTitleBarProps) {
   const api = getElectronAPI()
   const isMac = api?.platform === 'darwin'
-  const { isPinned, togglePinned } = useWidgetStore()
+  const { isPinned, togglePinned, soundEnabled, toggleSound } = useWidgetStore()
 
   return (
     <div
@@ -43,6 +43,18 @@ export function DesktopTitleBar({ compact }: DesktopTitleBarProps) {
         className="flex items-center gap-0.5 sm:gap-1 shrink-0"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        <button
+          onClick={toggleSound}
+          className={`p-0.5 sm:p-1 rounded transition-colors ${
+            soundEnabled
+              ? 'text-zinc-400 hover:bg-zinc-800'
+              : 'text-zinc-600 hover:bg-zinc-800'
+          }`}
+          aria-label={soundEnabled ? 'Mute sounds' : 'Unmute sounds'}
+          title={soundEnabled ? 'Mute trade sounds' : 'Unmute trade sounds'}
+        >
+          {soundEnabled ? <Volume2 size={12} /> : <VolumeOff size={12} />}
+        </button>
         <button
           onClick={togglePinned}
           className={`p-0.5 sm:p-1 rounded transition-colors ${

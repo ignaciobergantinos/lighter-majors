@@ -3,12 +3,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { MarketSymbol, TradeResponse } from '@/lib/types'
 import { MARKETS } from '@/lib/constants'
+import { playSuccessSound, playErrorSound } from '@/lib/audio'
+import { useWidgetStore } from '@/store/widget-store'
 
 interface TradeParams {
   symbol: MarketSymbol
   side: 'long' | 'short'
   /** Base amount to trade. Falls back to market minimum if omitted. */
   baseAmount?: number
+  /** USD size the user entered — forwarded for Discord notification. */
+  usdSize?: number
   /** Current mark price — forwarded for Discord notification context. */
   markPrice?: number
 }
@@ -31,6 +35,7 @@ async function executeTrade(params: TradeParams): Promise<TradeResponse> {
       marketIndex: market.marketIndex,
       side: params.side,
       ...(params.baseAmount != null && { baseAmount: params.baseAmount }),
+      ...(params.usdSize != null && { usdSize: params.usdSize }),
       ...(params.markPrice != null && { markPrice: params.markPrice }),
     }),
   })
@@ -74,21 +79,33 @@ async function executeClose(params: CloseParams): Promise<TradeResponse> {
 
 export function useTradeExecution() {
   const qc = useQueryClient()
+  const soundEnabled = useWidgetStore((s) => s.soundEnabled)
   const invalidate = () => qc.invalidateQueries({ queryKey: ['positions'] })
+
+  const onSuccess = () => {
+    invalidate()
+    if (soundEnabled) playSuccessSound()
+  }
+  const onError = () => {
+    if (soundEnabled) playErrorSound()
+  }
 
   const tradeMutation = useMutation({
     mutationFn: executeTrade,
-    onSuccess: invalidate,
+    onSuccess,
+    onError,
   })
 
   const closeAllMutation = useMutation({
     mutationFn: (params: CloseAllParams | undefined) => executeCloseAll(params),
-    onSuccess: invalidate,
+    onSuccess,
+    onError,
   })
 
   const closeMutation = useMutation({
     mutationFn: executeClose,
-    onSuccess: invalidate,
+    onSuccess,
+    onError,
   })
 
   return {

@@ -50,17 +50,15 @@ export function notifyPositionOpen(params: {
   marketIndex: number
   side: 'long' | 'short'
   baseAmount: number
+  usdSize?: number
   price?: number
 }): void {
   const symbol = resolveSymbol(params.marketIndex)
   const sideLabel = params.side === 'long' ? 'LONG' : 'SHORT'
   const emoji = params.side === 'long' ? '🟢' : '🔴'
 
-  let message = `${emoji} **[Lighter] ${sideLabel} ${symbol}** — ${params.baseAmount} ${symbol}`
-  if (params.price) {
-    const volume = params.baseAmount * params.price
-    message += ` @ ~$${params.price.toFixed(2)} (~$${volume.toFixed(2)})`
-  }
+  const usd = params.usdSize ?? (params.price ? params.baseAmount * params.price : null)
+  const message = `${emoji} **[Lighter] ${sideLabel} ${symbol}** — ${usd !== null ? `$${usd.toFixed(2)}` : `${params.baseAmount} ${symbol}`}`
 
   // Fire-and-forget — do not await
   void postToDiscord(message)
@@ -73,7 +71,7 @@ export function notifyPositionClose(params: {
 }): void {
   const { position } = params
   const sideLabel = position.side === 'long' ? 'LONG' : 'SHORT'
-  const emoji = position.side === 'long' ? '🟢' : '🔴'
+  const closeEmoji = '✖️'
 
   const pnl = parseFloat(position.pnl || '0')
   const entryPrice = parseFloat(position.entryPrice || '0')
@@ -86,7 +84,7 @@ export function notifyPositionClose(params: {
   const closeNotional = closingPrice * size
 
   const lines = [
-    `${emoji} **[Lighter] ${sideLabel} ${position.symbol}** — ${size} ${position.symbol}`,
+    `${closeEmoji} **[Lighter] ${sideLabel} ${position.symbol}** — ${formatUsd(notional)}`,
     ``,
     `Entry: ${formatUsd(entryPrice)} → Exit: ${formatUsd(closingPrice)}`,
     `Size: ${formatUsd(notional)} → ${formatUsd(closeNotional)}`,

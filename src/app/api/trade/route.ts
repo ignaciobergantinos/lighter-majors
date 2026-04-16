@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const log = createLogger(cid)
 
   try {
-    const { marketIndex, side, baseAmount: customBaseAmount, markPrice } = await req.json()
+    const { marketIndex, side, baseAmount: customBaseAmount, markPrice, usdSize: requestUsdSize } = await req.json()
 
     // Validate market
     const market = Object.values(MARKETS).find(
@@ -42,11 +42,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { status: 400 })
     }
 
+    const price = typeof markPrice === 'number' && markPrice > 0 ? markPrice : undefined
+    const usdSize = typeof requestUsdSize === 'number' && requestUsdSize > 0
+      ? requestUsdSize
+      : price ? baseAmount * price : undefined
     notifyPositionOpen({
       marketIndex,
       side,
       baseAmount,
-      price: typeof markPrice === 'number' ? markPrice : undefined,
+      usdSize,
+      price,
     })
 
     return NextResponse.json(result)

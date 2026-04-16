@@ -45,10 +45,11 @@ export function FloatingTradeWidget() {
         symbol: activeTab,
         side,
         baseAmount: getBaseAmount(),
+        usdSize: parseFloat(usdSize) || undefined,
         markPrice: markPrice || undefined,
       })
     },
-    [placeTrade, activeTab, getBaseAmount, markPrice],
+    [placeTrade, activeTab, getBaseAmount, usdSize, markPrice],
   )
 
   const pnl = parseFloat(aggregatePnl || '0')

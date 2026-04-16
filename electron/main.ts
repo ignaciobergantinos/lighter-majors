@@ -18,6 +18,11 @@ import {
   clearWindowState,
   getDefaultBounds,
 } from './window-state'
+import {
+  loadPreferences,
+  savePreferences,
+  type UserPreferences,
+} from './preferences-store'
 
 // ── Config ──────────────────────────────────────────────────
 const DEV_SERVER_URL = 'http://localhost:3000/desktop'
@@ -210,6 +215,15 @@ ipcMain.on('app:quit', () => {
   app.quit()
 })
 
+// ── Preferences Persistence (file-backed) ──────────────────
+ipcMain.handle('preferences:load', () => {
+  return loadPreferences()
+})
+
+ipcMain.on('preferences:save', (_event, prefs: UserPreferences) => {
+  savePreferences(prefs)
+})
+
 // ── Global Shortcuts (system-wide, work even when app is not focused) ──
 const API_URL = 'http://localhost:3000'
 
@@ -248,6 +262,7 @@ function fireTrade(side: 'long' | 'short'): void {
       marketIndex: market.marketIndex,
       side,
       ...(baseAmount != null && baseAmount >= market.minBaseAmount && { baseAmount }),
+      ...(usdSize > 0 && { usdSize }),
       ...(price > 0 && { markPrice: price }),
     }),
   }).catch((err) => {

@@ -28,4 +28,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('shortcuts:status', listener)
     return () => ipcRenderer.removeListener('shortcuts:status', listener)
   },
+
+  /** Load persisted user preferences from disk (async) */
+  loadPreferences: (): Promise<Record<string, unknown> | null> =>
+    ipcRenderer.invoke('preferences:load'),
+
+  /** Save user preferences to disk (fire-and-forget) */
+  savePreferences: (prefs: Record<string, unknown>) =>
+    ipcRenderer.send('preferences:save', prefs),
 })

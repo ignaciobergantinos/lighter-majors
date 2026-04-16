@@ -94,6 +94,21 @@ async function warmUpNonce(accountIndex: number, apiKeyIndex: number): Promise<v
   }
 }
 
+/**
+ * Force-refresh the SDK's internal nonce from the server.
+ * Call this after an "invalid nonce" error to re-sync.
+ */
+export async function refreshNonce(): Promise<void> {
+  if (!_client || !_config) return
+  // Access the SDK's internal nonce manager to trigger a hard refresh.
+  // The SDK's own error handler fails to call this (checks error.message
+  // instead of error.response.data.message), so we do it manually.
+  const nm = (_client as any).nonce_manager
+  if (nm && typeof nm.hard_refresh_nonce === 'function') {
+    await nm.hard_refresh_nonce(_config.apiKeyIndex)
+  }
+}
+
 /** Current config (available after first getSignerClient call). */
 export function getKeyConfig(): LighterKeyConfig {
   if (!_config) {
