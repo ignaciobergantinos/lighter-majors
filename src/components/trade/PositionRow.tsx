@@ -33,7 +33,9 @@ export function PositionRow({ position, onClose, isClosing }: PositionRowProps) 
       <div className="flex items-center gap-3">
         <div className="text-right">
           <div className="text-[10px] text-zinc-500">Size</div>
-          <div className="text-xs text-zinc-300">{position.size}</div>
+          <div className="text-xs text-zinc-300">
+            ${(Math.abs(parseFloat(position.size)) * (parseFloat(position.entryPrice) || 0)).toFixed(2)}
+          </div>
         </div>
         <div className="text-right">
           <div className="text-[10px] text-zinc-500">Entry</div>

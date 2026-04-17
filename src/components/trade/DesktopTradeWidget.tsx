@@ -1,7 +1,7 @@
 // ── Desktop Trade Widget — Full-window, no FAB ─────────────
 // Responsive layout that adapts to very small viewport sizes
 'use client'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useWidgetStore } from '@/store/widget-store'
 import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
@@ -10,16 +10,17 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useAutoSize } from '@/hooks/useAutoSize'
 import { useViewportSize } from '@/hooks/useViewportSize'
 import { PairTabs } from './PairTabs'
+import { SplitConfig } from './SplitConfig'
 import { DesktopTitleBar } from './DesktopTitleBar'
-import { MARKETS } from '@/lib/constants'
+import { MARKETS, MARKET_SYMBOLS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
 
 export function DesktopTradeWidget() {
-  const { activeTab, usdSizes, prices, autoSizeEnabled, setActiveTab, setUsdSize, toggleAutoSize } =
+  const { activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
   const { positions, balance, aggregatePnl, isLoading } = usePositions()
-  const { placeTrade, closeAll, isTrading, isClosing } = useTradeExecution()
+  const { placeTrade, placeSplitTrade, closeAll, closePosition, isTrading, isClosing } = useTradeExecution()
   const sizeInputRef = useRef<HTMLInputElement>(null)
   const { isUltraCompact, isCompact, isShortHeight } = useViewportSize()
 
@@ -37,8 +38,10 @@ export function DesktopTradeWidget() {
       activeTab,
       usdSize,
       markPrice: markPrice || undefined,
+      splitEnabled,
+      splitConfig,
     })
-  }, [activeTab, usdSize, markPrice])
+  }, [activeTab, usdSize, markPrice, splitEnabled, splitConfig])
 
   const getBaseAmount = useCallback((): number | undefined => {
     const usd = parseFloat(usdSize)
@@ -52,25 +55,71 @@ export function DesktopTradeWidget() {
 
   const handleTrade = useCallback(
     (side: 'long' | 'short') => {
-      placeTrade({
-        symbol: activeTab,
-        side,
-        baseAmount: getBaseAmount(),
-        usdSize: parseFloat(usdSize) || undefined,
-        markPrice: markPrice || undefined,
-      })
+      if (splitEnabled) {
+        const totalUsd = parseFloat(usdSize) || 0
+        const mps: Partial<Record<MarketSymbol, number>> = {}
+        for (const [sym, tick] of Object.entries(prices)) {
+          if (tick) mps[sym as MarketSymbol] = parseFloat(tick.markPrice)
+        }
+        placeSplitTrade({ side, totalUsdSize: totalUsd, markPrices: mps, splitConfig })
+      } else {
+        placeTrade({
+          symbol: activeTab,
+          side,
+          baseAmount: getBaseAmount(),
+          usdSize: parseFloat(usdSize) || undefined,
+          markPrice: markPrice || undefined,
+        })
+      }
     },
-    [placeTrade, activeTab, getBaseAmount, usdSize, markPrice],
+    [placeTrade, placeSplitTrade, splitEnabled, splitConfig, activeTab, getBaseAmount, usdSize, markPrice, prices],
   )
 
   const pnl = parseFloat(aggregatePnl || '0')
   const isProfit = pnl >= 0
   const hasPositions = positions.length > 0
 
+  // ── Position Exposure & Leverage ──────────────────────
+  const { totalExposure, leverageMultiplier } = useMemo(() => {
+    if (!hasPositions || !balance) return { totalExposure: 0, leverageMultiplier: 0 }
+    // Sum each position's USD value: |size| × price
+    // Use mark price from WebSocket when available, fall back to entry price
+    const total = positions.reduce((sum, pos) => {
+      const tick = prices[pos.symbol]
+      const mp = tick ? parseFloat(tick.markPrice) : 0
+      const price = mp > 0 ? mp : parseFloat(pos.entryPrice) || 0
+      return sum + Math.abs(parseFloat(pos.size)) * price
+    }, 0)
+    const bal = parseFloat(balance.availableBalance) || 1
+    return { totalExposure: total, leverageMultiplier: total / bal }
+  }, [positions, prices, balance, hasPositions])
+
+  // Aggregate direction: all long → LONG, all short → SHORT, mixed → MIX
+  const positionDirection = useMemo((): 'LONG' | 'SHORT' | 'MIX' | undefined => {
+    if (!hasPositions) return undefined
+    const sides = new Set(positions.map((p) => p.side))
+    if (sides.size === 1) return sides.has('long') ? 'LONG' : 'SHORT'
+    return 'MIX'
+  }, [positions, hasPositions])
+
+  /** Background tint: yellow if MIX or >42x, red if SHORT, green otherwise */
+  const getExposureBg = () => {
+    if (!hasPositions) return 'bg-zinc-950/95 border-zinc-800/50'
+    if (positionDirection === 'MIX' || leverageMultiplier >= 42) return 'bg-yellow-950/30 border-yellow-800/40'
+    if (positionDirection === 'SHORT') return 'bg-red-950/40 border-red-800/50'
+    return 'bg-emerald-950/20 border-emerald-800/30'
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-zinc-950/95 rounded-2xl overflow-hidden border border-zinc-800/50">
+    <div className={`flex flex-col h-screen rounded-2xl overflow-hidden border transition-colors duration-500 ${getExposureBg()}`}>
       {/* ── Draggable Titlebar ─────────────────────────── */}
-      <DesktopTitleBar compact={isCompact} />
+      <DesktopTitleBar
+        compact={isCompact}
+        totalExposure={totalExposure}
+        leverageMultiplier={leverageMultiplier}
+        hasPositions={hasPositions}
+        positionDirection={positionDirection}
+      />
 
       {/* ── Trade Panel ────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-1.5 sm:space-y-2.5">
@@ -106,6 +155,7 @@ export function DesktopTradeWidget() {
             onSelect={setActiveTab}
             compact
             ultraCompact={isUltraCompact}
+            disabled={splitEnabled}
           />
         </div>
 
@@ -119,7 +169,7 @@ export function DesktopTradeWidget() {
                        accent-emerald-500 cursor-pointer"
           />
           <span className="text-[9px] sm:text-[10px] text-zinc-500">
-            Auto-size (48×)
+            Auto-size (40×)
           </span>
         </label>
 
@@ -207,6 +257,84 @@ export function DesktopTradeWidget() {
             </div>
           </div>
         )}
+
+        {/* ── Open Positions ────────────────────────────── */}
+        {hasPositions && (
+          <div className="border-t border-zinc-800/60 pt-1.5 sm:pt-2">
+            <table className={`w-full ${isShortHeight ? 'text-[8px]' : 'text-[9px] sm:text-[10px]'}`}>
+              <thead>
+                <tr className="text-zinc-600 uppercase tracking-wide">
+                  <th className="text-left font-medium pb-0.5 sm:pb-1">Symbol</th>
+                  <th className="text-right font-medium pb-0.5 sm:pb-1">Size</th>
+                  <th className="text-right font-medium pb-0.5 sm:pb-1">PnL</th>
+                  <th className="w-5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((pos) => {
+                  const posPnl = parseFloat(pos.pnl)
+                  const tick = prices[pos.symbol]
+                  const mp = tick ? parseFloat(tick.markPrice) : undefined
+                  return (
+                    <tr key={pos.marketIndex}>
+                      <td className="text-left text-zinc-300 py-0.5">
+                        {pos.symbol}
+                        <span className={`ml-1 ${pos.side === 'long' ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {pos.side === 'long' ? 'L' : 'S'}
+                        </span>
+                      </td>
+                      <td className="text-right text-zinc-400 py-0.5">
+                        ${(() => {
+                          const price = mp && mp > 0 ? mp : parseFloat(pos.entryPrice) || 0
+                          return (Math.abs(parseFloat(pos.size)) * price).toFixed(2)
+                        })()}
+                      </td>
+                      <td className={`text-right font-medium py-0.5 ${posPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {posPnl >= 0 ? '+' : ''}${posPnl.toFixed(2)}
+                      </td>
+                      <td className="text-right py-0.5">
+                        <button
+                          onClick={() => closePosition({ marketIndex: pos.marketIndex, markPrice: mp })}
+                          disabled={isClosing}
+                          className="text-zinc-600 hover:text-red-400 disabled:opacity-30 transition-colors px-0.5"
+                          title={`Close ${pos.symbol} position`}
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Split Settings ────────────────────────────── */}
+        <div className="border-t border-zinc-800/60 pt-1.5 sm:pt-2">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none px-0.5">
+            <input
+              type="checkbox"
+              checked={splitEnabled}
+              onChange={toggleSplit}
+              className="w-3 h-3 rounded border-zinc-700 bg-zinc-900 text-amber-500
+                         accent-amber-500 cursor-pointer"
+            />
+            <span className="text-[9px] sm:text-[10px] text-zinc-500">
+              Split
+            </span>
+            {splitEnabled && (
+              <span className="text-[8px] sm:text-[9px] text-amber-500/70">
+                {MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled).map((s) => `${splitConfig[s].pct}${s[0]}`).join('/')}
+              </span>
+            )}
+          </label>
+          {splitEnabled && (
+            <div className="mt-1.5">
+              <SplitConfig />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
