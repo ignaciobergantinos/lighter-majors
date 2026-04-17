@@ -237,7 +237,23 @@ const MARKETS: Record<string, { marketIndex: number; minBaseAmount: number; size
 }
 
 // Cached widget state from renderer — updated via IPC
-let widgetState = { activeTab: 'BTC', usdSize: '10', markPrice: 0 }
+let widgetState: {
+  activeTab: string
+  usdSize: string
+  markPrice: number
+  splitEnabled: boolean
+  splitConfig: Record<string, { enabled: boolean; pct: number }>
+} = {
+  activeTab: 'BTC',
+  usdSize: '10',
+  markPrice: 0,
+  splitEnabled: false,
+  splitConfig: {
+    BTC: { enabled: true, pct: 70 },
+    ETH: { enabled: true, pct: 30 },
+    SOL: { enabled: false, pct: 0 },
+  },
+}
 
 // Cached prices per symbol — fetched independently from Lighter REST API
 const cachedPrices: Record<string, number> = { BTC: 0, ETH: 0, SOL: 0 }
@@ -269,12 +285,16 @@ async function fetchPrice(symbol: string): Promise<number> {
   }
 }
 
-/** Fetch price for the currently selected symbol */
+/** Fetch prices — all symbols when split is on, otherwise just the active one */
 async function fetchActivePrice(): Promise<void> {
-  const symbol = widgetState.activeTab
-  const price = await fetchPrice(symbol)
-  if (price > 0) {
-    widgetState.markPrice = price
+  if (widgetState.splitEnabled) {
+    await fetchAllPrices()
+  } else {
+    const symbol = widgetState.activeTab
+    const price = await fetchPrice(symbol)
+    if (price > 0) {
+      widgetState.markPrice = price
+    }
   }
 }
 
@@ -297,9 +317,20 @@ function startPricePolling(): void {
   pricePollTimer = setInterval(fetchActivePrice, PRICE_POLL_MS)
 }
 
-ipcMain.on('widget:state-sync', (_event, state: { activeTab: string; usdSize: string; markPrice?: number }) => {
+ipcMain.on('widget:state-sync', (_event, state: {
+  activeTab: string
+  usdSize: string
+  markPrice?: number
+  splitEnabled?: boolean
+  splitConfig?: Record<string, { enabled: boolean; pct: number }>
+}) => {
   const prevTab = widgetState.activeTab
-  widgetState = { ...widgetState, ...state }
+  widgetState = {
+    ...widgetState,
+    ...state,
+    splitEnabled: state.splitEnabled ?? widgetState.splitEnabled,
+    splitConfig: state.splitConfig ?? widgetState.splitConfig,
+  }
 
   // If renderer sends a valid price, update our cache too
   if (state.markPrice && state.markPrice > 0) {
@@ -322,16 +353,15 @@ ipcMain.on('widget:state-sync', (_event, state: { activeTab: string; usdSize: st
   }
 })
 
-function fireTrade(side: 'long' | 'short'): void {
-  const market = MARKETS[widgetState.activeTab]
+/** Fire a single trade for one symbol */
+function fireSingleTrade(side: 'long' | 'short', symbol: string, usdSize: number): void {
+  const market = MARKETS[symbol]
   if (!market) {
-    console.error(`[global-shortcut] Unknown market: ${widgetState.activeTab}`)
+    console.error(`[global-shortcut] Unknown market: ${symbol}`)
     return
   }
 
-  // Use our own cached price (more reliable than renderer sync)
-  const usdSize = parseFloat(widgetState.usdSize) || 0
-  const price = widgetState.markPrice || cachedPrices[widgetState.activeTab] || 0
+  const price = cachedPrices[symbol] || (symbol === widgetState.activeTab ? widgetState.markPrice : 0)
   let baseAmount: number | undefined
   if (price > 0 && usdSize > 0) {
     const raw = usdSize / price
@@ -339,7 +369,7 @@ function fireTrade(side: 'long' | 'short'): void {
     baseAmount = rounded >= market.minBaseAmount ? rounded : undefined
   }
 
-  console.log(`[global-shortcut] ${side.toUpperCase()} ${widgetState.activeTab} — $${usdSize} @ $${price} (~${baseAmount?.toFixed(market.sizeDecimals) ?? 'min'} ${widgetState.activeTab})`)
+  console.log(`[global-shortcut] ${side.toUpperCase()} ${symbol} — $${usdSize} @ $${price} (~${baseAmount?.toFixed(market.sizeDecimals) ?? 'min'} ${symbol})`)
 
   fetch(`${API_URL}/api/trade`, {
     method: 'POST',
@@ -352,8 +382,38 @@ function fireTrade(side: 'long' | 'short'): void {
       ...(price > 0 && { markPrice: price }),
     }),
   }).catch((err) => {
-    console.error(`[global-shortcut] trade failed:`, err)
+    console.error(`[global-shortcut] trade failed for ${symbol}:`, err)
   })
+}
+
+function fireTrade(side: 'long' | 'short'): void {
+  const totalUsd = parseFloat(widgetState.usdSize) || 0
+
+  if (widgetState.splitEnabled) {
+    // Split mode: fire trades for each enabled coin by its percentage
+    const { splitConfig } = widgetState
+    const activeSymbols = Object.keys(splitConfig).filter(
+      (s) => splitConfig[s].enabled && splitConfig[s].pct > 0,
+    )
+
+    if (activeSymbols.length === 0) {
+      console.warn('[global-shortcut] Split mode on but no coins enabled')
+      return
+    }
+
+    console.log(`[global-shortcut] SPLIT ${side.toUpperCase()} — $${totalUsd} across ${activeSymbols.join('/')}`)
+
+    for (const symbol of activeSymbols) {
+      const pct = splitConfig[symbol].pct / 100
+      const sliceUsd = Math.floor(totalUsd * pct)
+      if (sliceUsd >= 10) { // minQuote
+        fireSingleTrade(side, symbol, sliceUsd)
+      }
+    }
+  } else {
+    // Normal mode: single symbol
+    fireSingleTrade(side, widgetState.activeTab, totalUsd)
+  }
 }
 
 /**
@@ -373,7 +433,7 @@ function ensureAccessibilityPermission(): boolean {
   dialog.showMessageBoxSync({
     type: 'info',
     title: 'Accessibility Permission Required',
-    message: 'Lighter Majors needs Accessibility permission to register global keyboard shortcuts (Ctrl+1, Ctrl+3) that work from any app.',
+    message: 'Lighter Majors needs Accessibility permission to register global keyboard shortcuts (Ctrl+1, Ctrl+4) that work from any app.',
     detail: 'Click OK to open System Settings. Add this app under Privacy & Security → Accessibility, then restart the app.',
     buttons: ['OK'],
   })
@@ -404,28 +464,28 @@ function registerGlobalShortcuts(): void {
     console.log('[global-shortcut] ✓ Registered Control+1 → Long')
   }
 
-  // Ctrl+3 → Short (selected symbol + size)
-  const shortOk = globalShortcut.register('Control+3', () => {
-    console.log('[global-shortcut] Ctrl+3 → SHORT')
+  // Ctrl+4 → Short (selected symbol + size)
+  const shortOk = globalShortcut.register('Control+4', () => {
+    console.log('[global-shortcut] Ctrl+4 → SHORT')
     fireTrade('short')
   })
 
   if (!shortOk) {
-    console.error('[global-shortcut] Failed to register Control+3')
+    console.error('[global-shortcut] Failed to register Control+4')
   } else {
-    console.log('[global-shortcut] ✓ Registered Control+3 → Short')
+    console.log('[global-shortcut] ✓ Registered Control+4 → Short')
   }
 
   const longRegistered = globalShortcut.isRegistered('Control+1')
-  const shortRegistered = globalShortcut.isRegistered('Control+3')
+  const shortRegistered = globalShortcut.isRegistered('Control+4')
 
-  console.log(`[global-shortcut] Verified: Ctrl+1=${longRegistered}, Ctrl+3=${shortRegistered}`)
+  console.log(`[global-shortcut] Verified: Ctrl+1=${longRegistered}, Ctrl+4=${shortRegistered}`)
 
   mainWindow?.webContents.send('shortcuts:status', {
     active: longRegistered && shortRegistered,
     shortcuts: {
       'Control+1': longRegistered,
-      'Control+3': shortRegistered,
+      'Control+4': shortRegistered,
     },
   })
 }

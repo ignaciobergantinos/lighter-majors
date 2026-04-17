@@ -1,7 +1,7 @@
 // ── Zustand Widget Store ────────────────────────────────────
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
-import type { MarketSymbol, PriceTick } from '@/lib/types'
+import type { MarketSymbol, PriceTick, SplitCoinConfig } from '@/lib/types'
 import { MARKETS } from '@/lib/constants'
 
 const defaultUsdSizes: Record<MarketSymbol, string> = {
@@ -21,6 +21,10 @@ interface WidgetState {
   soundEnabled: boolean
   /** Whether USD size auto-calculates from balance × 48 */
   autoSizeEnabled: boolean
+  /** Whether split mode is active */
+  splitEnabled: boolean
+  /** Per-coin split configuration (enabled + percentage) */
+  splitConfig: Record<MarketSymbol, SplitCoinConfig>
 
   toggleWidget: () => void
   setOpen: (open: boolean) => void
@@ -30,6 +34,9 @@ interface WidgetState {
   setUsdSize: (size: string) => void
   toggleSound: () => void
   toggleAutoSize: () => void
+  toggleSplit: () => void
+  toggleSplitCoin: (symbol: MarketSymbol) => void
+  setSplitPct: (symbol: MarketSymbol, pct: number) => void
 }
 
 // ── Electron-aware storage adapter ─────────────────────────
@@ -112,6 +119,12 @@ export const useWidgetStore = create<WidgetState>()(
       usdSizes: { ...defaultUsdSizes },
       soundEnabled: true,
       autoSizeEnabled: true,
+      splitEnabled: false,
+      splitConfig: {
+        BTC: { enabled: true, pct: 70 },
+        ETH: { enabled: true, pct: 30 },
+        SOL: { enabled: false, pct: 0 },
+      },
 
       toggleWidget: () => set((s) => ({ isOpen: !s.isOpen })),
       setOpen: (open) => set({ isOpen: open }),
@@ -125,6 +138,21 @@ export const useWidgetStore = create<WidgetState>()(
         })),
       toggleSound: () => set((s) => ({ soundEnabled: !s.soundEnabled })),
       toggleAutoSize: () => set((s) => ({ autoSizeEnabled: !s.autoSizeEnabled })),
+      toggleSplit: () => set((s) => ({ splitEnabled: !s.splitEnabled })),
+      toggleSplitCoin: (symbol) =>
+        set((s) => ({
+          splitConfig: {
+            ...s.splitConfig,
+            [symbol]: { ...s.splitConfig[symbol], enabled: !s.splitConfig[symbol].enabled },
+          },
+        })),
+      setSplitPct: (symbol, pct) =>
+        set((s) => ({
+          splitConfig: {
+            ...s.splitConfig,
+            [symbol]: { ...s.splitConfig[symbol], pct },
+          },
+        })),
     }),
     {
       name: 'lighter-widget',
@@ -136,6 +164,8 @@ export const useWidgetStore = create<WidgetState>()(
         usdSizes: state.usdSizes,
         soundEnabled: state.soundEnabled,
         autoSizeEnabled: state.autoSizeEnabled,
+        splitEnabled: state.splitEnabled,
+        splitConfig: state.splitConfig,
       }),
     },
   ),

@@ -43,7 +43,8 @@ export const MARKETS: Record<MarketSymbol, MarketConfig> = {
 export const MARKET_SYMBOLS: MarketSymbol[] = ['BTC', 'ETH', 'SOL']
 
 /** Default leverage multiplier for auto-sizing (balance × this = USD size) */
-export const SIZE_MULTIPLIER = 48
+export const SIZE_MULTIPLIER = 40
+
 
 export const POLL_INTERVAL_MS = 5_000
 export const WS_RECONNECT_MS = 3_000

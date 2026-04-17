@@ -3,7 +3,7 @@ import type { ShortcutBinding } from '@/lib/types'
 
 const STORAGE_KEY = 'lighter-shortcuts'
 
-// Global shortcuts (Ctrl+1 → Long, Ctrl+3 → Short) are handled by
+// Global shortcuts (Ctrl+1 → Long, Ctrl+4 → Short) are handled by
 // Electron's globalShortcut in main.ts. These web-level shortcuts
 // are only active in the browser (non-Electron) fallback.
 export const DEFAULT_SHORTCUTS: ShortcutBinding[] = []

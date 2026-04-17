@@ -60,6 +60,12 @@ export interface ShortcutBinding {
   label: string
 }
 
+export interface SplitCoinConfig {
+  enabled: boolean
+  /** Allocation percentage (0–100). Active coins' pcts should sum to 100. */
+  pct: number
+}
+
 export type ShortcutAction =
   | { type: 'trade'; symbol: MarketSymbol; side: 'long' | 'short' }
   | { type: 'close-all' }

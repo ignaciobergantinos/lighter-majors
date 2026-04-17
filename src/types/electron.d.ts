@@ -11,7 +11,13 @@ interface ElectronAPI {
   quit: () => void
   isElectron: true
   platform: NodeJS.Platform
-  syncWidgetState: (state: { activeTab: string; usdSize: string; markPrice?: number }) => void
+  syncWidgetState: (state: {
+    activeTab: string
+    usdSize: string
+    markPrice?: number
+    splitEnabled?: boolean
+    splitConfig?: Record<string, { enabled: boolean; pct: number }>
+  }) => void
   onShortcutsStatus: (callback: (status: ShortcutsStatus) => void) => () => void
 }
 

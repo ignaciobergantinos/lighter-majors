@@ -1,8 +1,8 @@
 // ── Trade Execution Hook ────────────────────────────────────
 'use client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { MarketSymbol, TradeResponse } from '@/lib/types'
-import { MARKETS } from '@/lib/constants'
+import type { MarketSymbol, TradeResponse, SplitCoinConfig } from '@/lib/types'
+import { MARKETS, MARKET_SYMBOLS } from '@/lib/constants'
 import { playSuccessSound, playErrorSound } from '@/lib/audio'
 import { useWidgetStore } from '@/store/widget-store'
 
@@ -40,6 +40,67 @@ async function executeTrade(params: TradeParams): Promise<TradeResponse> {
     }),
   })
   return parseTradeResponse(res)
+}
+
+interface SplitTradeParams {
+  side: 'long' | 'short'
+  /** Total USD size to split across all symbols */
+  totalUsdSize: number
+  /** Mark prices keyed by symbol */
+  markPrices: Partial<Record<MarketSymbol, number>>
+  /** Per-coin split configuration from the store */
+  splitConfig: Record<MarketSymbol, SplitCoinConfig>
+}
+
+/** Place split orders for all enabled coins with their configured percentages */
+async function executeSplitTrade(params: SplitTradeParams): Promise<TradeResponse> {
+  const { side, totalUsdSize, markPrices, splitConfig } = params
+  const errors: string[] = []
+
+  // Only trade enabled coins
+  const activeSymbols = MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled && splitConfig[s].pct > 0)
+  if (activeSymbols.length === 0) {
+    throw new Error('No coins enabled for split')
+  }
+
+  const results = await Promise.allSettled(
+    activeSymbols.map(async (symbol) => {
+      const pct = splitConfig[symbol].pct / 100
+      const usdSize = Math.floor(totalUsdSize * pct)
+      const market = MARKETS[symbol]
+      const price = markPrices[symbol]
+
+      if (!price || price <= 0 || usdSize < market.minQuote) return null
+
+      const base = usdSize / price
+      const baseAmount = parseFloat(base.toFixed(market.sizeDecimals))
+      if (baseAmount < market.minBaseAmount) return null
+
+      const res = await fetch('/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          marketIndex: market.marketIndex,
+          side,
+          baseAmount,
+          usdSize,
+          markPrice: price,
+        }),
+      })
+      return parseTradeResponse(res)
+    }),
+  )
+
+  for (const r of results) {
+    if (r.status === 'rejected') errors.push(r.reason?.message ?? 'Unknown error')
+    else if (r.value && !r.value.success) errors.push(r.value.error ?? 'Order failed')
+  }
+
+  if (errors.length === activeSymbols.length) {
+    throw new Error(`All split orders failed: ${errors.join('; ')}`)
+  }
+
+  return { success: true }
 }
 
 interface CloseAllParams {
@@ -108,12 +169,19 @@ export function useTradeExecution() {
     onError,
   })
 
+  const splitTradeMutation = useMutation({
+    mutationFn: executeSplitTrade,
+    onSuccess,
+    onError,
+  })
+
   return {
     placeTrade: tradeMutation.mutate,
+    placeSplitTrade: splitTradeMutation.mutate,
     closeAll: closeAllMutation.mutate,
     closePosition: closeMutation.mutate,
-    isTrading: tradeMutation.isPending,
+    isTrading: tradeMutation.isPending || splitTradeMutation.isPending,
     isClosing: closeAllMutation.isPending || closeMutation.isPending,
-    tradeError: tradeMutation.error?.message ?? null,
+    tradeError: tradeMutation.error?.message ?? splitTradeMutation.error?.message ?? null,
   }
 }

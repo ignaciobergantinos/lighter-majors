@@ -19,8 +19,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
 
   /** Push current widget state so global shortcuts use the selected symbol + size */
-  syncWidgetState: (state: { activeTab: string; usdSize: string; markPrice?: number }) =>
-    ipcRenderer.send('widget:state-sync', state),
+  syncWidgetState: (state: {
+    activeTab: string
+    usdSize: string
+    markPrice?: number
+    splitEnabled?: boolean
+    splitConfig?: Record<string, { enabled: boolean; pct: number }>
+  }) => ipcRenderer.send('widget:state-sync', state),
 
   /** Listen for global shortcut registration status from main process */
   onShortcutsStatus: (callback: (status: { active: boolean; reason?: string; shortcuts?: Record<string, boolean> }) => void) => {

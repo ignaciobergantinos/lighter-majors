@@ -17,6 +17,8 @@ interface PairTabsProps {
   compact?: boolean
   /** Ultra-compact: single-letter labels, minimal padding */
   ultraCompact?: boolean
+  /** Disable all symbol buttons (e.g. when split mode is on) */
+  disabled?: boolean
 }
 
 const PILL_COLORS: Record<MarketSymbol, string> = {
@@ -25,10 +27,10 @@ const PILL_COLORS: Record<MarketSymbol, string> = {
   SOL: 'data-[active=true]:bg-purple-500/20 data-[active=true]:text-purple-400',
 }
 
-export function PairTabs({ active, onSelect, compact, ultraCompact }: PairTabsProps) {
+export function PairTabs({ active, onSelect, compact, ultraCompact, disabled }: PairTabsProps) {
   return (
     <div
-      className={`flex gap-0.5 bg-zinc-900 ${compact ? 'p-0.5 rounded-lg' : 'p-1 rounded-lg'}`}
+      className={`flex gap-0.5 bg-zinc-900 ${compact ? 'p-0.5 rounded-lg' : 'p-1 rounded-lg'} ${disabled ? 'opacity-40 pointer-events-none' : ''}`}
       role="tablist"
       aria-label="Trading pair"
     >
@@ -38,6 +40,7 @@ export function PairTabs({ active, onSelect, compact, ultraCompact }: PairTabsPr
           role="tab"
           aria-selected={active === symbol}
           data-active={active === symbol}
+          disabled={disabled}
           onClick={() => onSelect(symbol)}
           className={`
             ${ultraCompact
@@ -47,9 +50,10 @@ export function PairTabs({ active, onSelect, compact, ultraCompact }: PairTabsPr
                 : 'flex-1 px-3 py-1.5 text-xs'}
             font-semibold rounded-md transition-all duration-150
             text-zinc-500 hover:text-zinc-300
+            disabled:cursor-not-allowed
             ${PILL_COLORS[symbol]}
           `}
-          title={symbol}
+          title={disabled ? 'Split mode active' : symbol}
         >
           {ultraCompact ? SHORT_LABELS[symbol] : symbol}
         </button>
