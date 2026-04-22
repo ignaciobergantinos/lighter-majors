@@ -90,26 +90,25 @@ export function notifyPositionOpen(params: {
   void postToDiscord(message)
 }
 
-/** Notify Discord when a position is closed with P&L details. Fire-and-forget. */
+/** Notify Discord when a position is closed with P&L details. Fire-and-forget.
+ *  If `realizedPnl` is provided, use it (true realized PnL from Lighter).
+ *  Otherwise fall back to the position's pre-close unrealized_pnl snapshot. */
 export function notifyPositionClose(params: {
   position: Position
   closingPrice?: number
+  realizedPnl?: number
 }): void {
-  const { position } = params
+  const { position, realizedPnl } = params
   // Clear dedup state so next open on this market notifies fresh
   lastNotifiedFill.delete(position.marketIndex)
   const sideLabel = position.side === 'long' ? 'LONG' : 'SHORT'
   const closeEmoji = '✖️'
 
-  const pnl = parseFloat(position.pnl || '0')
+  const pnl = realizedPnl ?? parseFloat(position.pnl || '0')
   const entryPrice = parseFloat(position.entryPrice || '0')
   const size = Math.abs(parseFloat(position.size || '0'))
   const notional = entryPrice * size
   const pctChange = notional > 0 ? (pnl / notional) * 100 : 0
-
-  // Use closing price for volume if available, otherwise entry price
-  const closingPrice = params.closingPrice ?? entryPrice
-  const closeNotional = closingPrice * size
 
   const lines = [
     `${closeEmoji} **[Lighter] ${sideLabel} ${position.symbol}** — ${formatUsd(notional)}`,
@@ -124,11 +123,13 @@ export function notifyPositionClose(params: {
 export function notifyCloseAll(
   positions: Position[],
   markPrices?: Record<number, number>,
+  realizedPnlByMarket?: Record<number, number>,
 ): void {
   if (positions.length === 0) return
 
   for (const position of positions) {
     const closingPrice = markPrices?.[position.marketIndex]
-    notifyPositionClose({ position, closingPrice })
+    const realizedPnl = realizedPnlByMarket?.[position.marketIndex]
+    notifyPositionClose({ position, closingPrice, realizedPnl })
   }
 }
