@@ -66,6 +66,43 @@ export async function fetchAccountData(cid?: string): Promise<AccountData> {
   }
 }
 
+/**
+ * Fetch each market's cumulative realized_pnl (funding + closed gains) regardless
+ * of whether the position is currently open. Used to diff before/after a close
+ * to derive the realized PnL attributable to *this* close.
+ */
+export async function fetchRealizedPnlByMarket(
+  cid?: string,
+): Promise<Record<number, number>> {
+  const log = createLogger(cid ?? 'no-cid')
+  const { accountIndex } = getKeyConfig()
+  const url = `${API_BASE}/api/v1/account?by=index&value=${accountIndex}`
+
+  const res = await fetch(url, { headers: authHeaders(), cache: 'no-store' })
+  if (!res.ok) {
+    log.error('lighter_api.fetch_realized_pnl.error', {
+      status: res.status,
+      statusText: res.statusText,
+    })
+    throw new Error(`Account fetch failed: ${res.status}`)
+  }
+
+  const raw = await res.json()
+  const data = raw.accounts?.[0] ?? raw
+  const items = Array.isArray(data.positions)
+    ? data.positions
+    : Object.values(data.positions ?? {})
+
+  const map: Record<number, number> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const p of items as any[]) {
+    const idx = p.market_id ?? p.market_index
+    if (idx == null) continue
+    map[idx] = parseFloat(p.realized_pnl ?? '0')
+  }
+  return map
+}
+
 function parsePositions(raw: unknown[] | Record<string, unknown>): Position[] {
   const items = Array.isArray(raw) ? raw : Object.values(raw)
 
