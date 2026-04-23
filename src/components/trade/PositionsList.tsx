@@ -2,10 +2,11 @@
 'use client'
 import type { Position } from '@/lib/types'
 import { PositionRow } from './PositionRow'
+import { useWidgetStore } from '@/store/widget-store'
+import { aggregateLivePnl } from '@/lib/pnl'
 
 interface PositionsListProps {
   positions: Position[]
-  aggregatePnl: string
   onClosePosition: (marketIndex: number) => void
   onCloseAll: () => void
   isClosing: boolean
@@ -13,12 +14,12 @@ interface PositionsListProps {
 
 export function PositionsList({
   positions,
-  aggregatePnl,
   onClosePosition,
   onCloseAll,
   isClosing,
 }: PositionsListProps) {
-  const pnl = parseFloat(aggregatePnl)
+  const prices = useWidgetStore((s) => s.prices)
+  const pnl = aggregateLivePnl(positions, prices)
   const isProfit = pnl >= 0
 
   if (positions.length === 0) {

@@ -2,6 +2,8 @@
 'use client'
 import { X } from 'lucide-react'
 import type { Position } from '@/lib/types'
+import { useWidgetStore } from '@/store/widget-store'
+import { livePnlFor } from '@/lib/pnl'
 
 interface PositionRowProps {
   position: Position
@@ -10,7 +12,8 @@ interface PositionRowProps {
 }
 
 export function PositionRow({ position, onClose, isClosing }: PositionRowProps) {
-  const pnl = parseFloat(position.pnl)
+  const prices = useWidgetStore((s) => s.prices)
+  const pnl = livePnlFor(position, prices)
   const isProfit = pnl >= 0
 
   return (

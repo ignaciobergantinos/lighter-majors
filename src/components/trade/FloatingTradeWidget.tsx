@@ -12,12 +12,13 @@ import { PairTabs } from './PairTabs'
 import { SplitConfig } from './SplitConfig'
 import { MARKETS, MARKET_SYMBOLS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
+import { aggregateLivePnl, livePnlFor } from '@/lib/pnl'
 
 export function FloatingTradeWidget() {
   const { isOpen, isPinned, activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, toggleWidget, togglePinned, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
-  const { positions, balance, aggregatePnl, isLoading } = usePositions()
+  const { positions, balance, isLoading } = usePositions()
   const { placeTrade, placeSplitTrade, closeAll, closePosition, isTrading, isClosing } = useTradeExecution()
   const sizeInputRef = useRef<HTMLInputElement>(null)
 
@@ -64,7 +65,7 @@ export function FloatingTradeWidget() {
     [placeTrade, placeSplitTrade, splitEnabled, splitConfig, activeTab, getBaseAmount, usdSize, markPrice, prices],
   )
 
-  const pnl = parseFloat(aggregatePnl || '0')
+  const pnl = useMemo(() => aggregateLivePnl(positions, prices), [positions, prices])
   const isProfit = pnl >= 0
   const hasPositions = positions.length > 0
 
@@ -290,9 +291,9 @@ export function FloatingTradeWidget() {
                   </thead>
                   <tbody>
                     {positions.map((pos) => {
-                      const posPnl = parseFloat(pos.pnl)
                       const tick = prices[pos.symbol]
                       const mp = tick ? parseFloat(tick.markPrice) : undefined
+                      const posPnl = livePnlFor(pos, prices)
                       return (
                         <tr key={pos.marketIndex}>
                           <td className="text-left text-zinc-300 py-0.5">
