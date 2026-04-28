@@ -1,6 +1,6 @@
 // ── POST /api/trade — place a market order ──────────────────
 import { NextRequest, NextResponse } from 'next/server'
-import { placeMarketOrder, fetchAccountData } from '@/lib/lighter-client'
+import { placeMarketOrder, fetchAccountData, fetchMarkPrice } from '@/lib/lighter-client'
 import { MARKETS } from '@/lib/constants'
 import { notifyPositionOpen } from '@/lib/discord-notifier'
 import { correlationId, createLogger, withTiming } from '@/lib/logger'
@@ -26,15 +26,25 @@ export async function POST(req: NextRequest) {
 
     const isAsk = side === 'short'
 
-    // Resolve base amount: use explicit value, or compute from usdSize / markPrice
+    // Resolve base amount: explicit baseAmount > usdSize/markPrice > usdSize + REST-fetched price.
+    // Fetching server-side ensures we never silently shrink to minBaseAmount when the
+    // renderer's WS feed hasn't populated the symbol yet (the source of the WTI $9.96 bug).
     let baseAmount: number
+    let priceForSizing: number = typeof markPrice === 'number' && markPrice > 0 ? markPrice : 0
     if (typeof customBaseAmount === 'number' && customBaseAmount >= market.minBaseAmount) {
       baseAmount = customBaseAmount
-    } else if (
-      typeof requestUsdSize === 'number' && requestUsdSize > 0 &&
-      typeof markPrice === 'number' && markPrice > 0
-    ) {
-      const computed = requestUsdSize / markPrice
+    } else if (typeof requestUsdSize === 'number' && requestUsdSize > 0) {
+      if (priceForSizing <= 0) {
+        priceForSizing = await fetchMarkPrice(marketIndex)
+      }
+      if (priceForSizing <= 0) {
+        log.warn('trade.no_price_available', { marketIndex, requestUsdSize })
+        return NextResponse.json(
+          { success: false, error: 'No price available for market — try again in a moment' },
+          { status: 503 },
+        )
+      }
+      const computed = requestUsdSize / priceForSizing
       const rounded = parseFloat(computed.toFixed(market.sizeDecimals))
       baseAmount = rounded >= market.minBaseAmount ? rounded : market.minBaseAmount
     } else {
@@ -53,7 +63,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { status: 400 })
     }
 
-    const price = typeof markPrice === 'number' && markPrice > 0 ? markPrice : undefined
+    const price = priceForSizing > 0
+      ? priceForSizing
+      : typeof markPrice === 'number' && markPrice > 0 ? markPrice : undefined
     const usdSize = typeof requestUsdSize === 'number' && requestUsdSize > 0
       ? requestUsdSize
       : price ? baseAmount * price : undefined

@@ -13,6 +13,24 @@ function authHeaders(): HeadersInit {
   return { authorization: generateAuthToken() }
 }
 
+/** Fetch the current mark/last-trade price for a market via REST.
+ *  Used as a server-side fallback when the renderer didn't supply markPrice
+ *  (e.g. WS feed hadn't populated the symbol yet). Returns 0 on failure. */
+export async function fetchMarkPrice(marketIndex: number): Promise<number> {
+  try {
+    const url = `${API_BASE}/api/v1/orderBookDetails?market_id=${marketIndex}`
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return 0
+    const data = await res.json()
+    const details = data.order_book_details?.[0] ?? data
+    const raw = details.mark_price ?? details.last_trade_price
+    const price = typeof raw === 'number' ? raw : parseFloat(raw ?? '0')
+    return Number.isFinite(price) && price > 0 ? price : 0
+  } catch {
+    return 0
+  }
+}
+
 // ── Read: positions + balance ───────────────────────────────
 
 export async function fetchAccountData(cid?: string): Promise<AccountData> {
