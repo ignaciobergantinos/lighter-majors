@@ -18,6 +18,19 @@ export function useKeyboardShortcuts() {
     function handler(e: KeyboardEvent) {
       if (!e.ctrlKey && !e.metaKey) return
 
+      // Electron registers Ctrl+1 / Ctrl+4 as system-wide global shortcuts
+      // (see electron/main.ts:registerGlobalShortcuts). When the window is
+      // focused, the OS dispatches the keypress to BOTH the global shortcut
+      // and this listener — firing the trade twice and racing the SDK's
+      // local nonce counter. Skip these keys in the renderer when running
+      // inside Electron; the global shortcut owns them.
+      const ownedByElectron =
+        typeof window !== 'undefined' &&
+        !!window.electronAPI &&
+        e.ctrlKey &&
+        (e.key === '1' || e.key === '4')
+      if (ownedByElectron) return
+
       const match = shortcuts.find(
         (s) => s.key === e.key && s.ctrl === (e.ctrlKey || e.metaKey),
       )
