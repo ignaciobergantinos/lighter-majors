@@ -55,6 +55,31 @@ export function playSuccessSound(): void {
 }
 
 /**
+ * Play a short tick (shortcut press).
+ * ~60ms — crisp high-pitched sine with fast decay.
+ */
+export function playShortcutSound(): void {
+  try {
+    const ctx = getAudioContext()
+    const now = ctx.currentTime
+
+    const gain = ctx.createGain()
+    gain.connect(ctx.destination)
+    gain.gain.setValueAtTime(0.1, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08)
+
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, now)
+    osc.connect(gain)
+    osc.start(now)
+    osc.stop(now + 0.08)
+  } catch {
+    // Audio not available — silently ignore
+  }
+}
+
+/**
  * Play a low warning buzz (error).
  * ~250ms — low-frequency square wave with quick decay.
  */

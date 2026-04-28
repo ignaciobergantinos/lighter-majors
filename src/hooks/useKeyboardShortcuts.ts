@@ -6,12 +6,13 @@ import type { ShortcutBinding, MarketSymbol } from '@/lib/types'
 import { useTradeExecution } from './useTradeExecution'
 import { useWidgetStore } from '@/store/widget-store'
 import { MARKETS } from '@/lib/constants'
+import { playShortcutSound } from '@/lib/audio'
 
 export function useKeyboardShortcuts() {
   const [shortcuts, setShortcuts] = useState<ShortcutBinding[]>(loadShortcuts)
   const { placeTrade, closeAll } = useTradeExecution()
   const toggleWidget = useWidgetStore((s) => s.toggleWidget)
-  const { activeTab, usdSizes, prices } = useWidgetStore()
+  const { activeTab, usdSizes, prices, soundEnabled } = useWidgetStore()
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
@@ -23,6 +24,7 @@ export function useKeyboardShortcuts() {
       if (!match) return
 
       e.preventDefault()
+      if (soundEnabled) playShortcutSound()
       const { action } = match
 
       switch (action.type) {
@@ -60,7 +62,17 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [shortcuts, placeTrade, closeAll, toggleWidget, activeTab, usdSizes, prices])
+  }, [shortcuts, placeTrade, closeAll, toggleWidget, activeTab, usdSizes, prices, soundEnabled])
+
+  // Also play the tick when Electron's global shortcuts fire (system-wide, window unfocused).
+  useEffect(() => {
+    const api = typeof window !== 'undefined' ? window.electronAPI : undefined
+    if (!api?.onShortcutFired) return
+    const off = api.onShortcutFired(() => {
+      if (soundEnabled) playShortcutSound()
+    })
+    return off
+  }, [soundEnabled])
 
   function updateShortcuts(next: ShortcutBinding[]) {
     setShortcuts(next)

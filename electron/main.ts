@@ -236,6 +236,9 @@ const MARKETS: Record<string, { marketIndex: number; minBaseAmount: number; size
   SOL: { marketIndex: 2, minBaseAmount: 0.05, sizeDecimals: 3, priceDecimals: 3 },
 }
 
+// Priority order for split orders (BTC first, then ETH, then SOL)
+const SYMBOL_PRIORITY = ['BTC', 'ETH', 'SOL'] as const
+
 // Cached widget state from renderer — updated via IPC
 let widgetState: {
   activeTab: string
@@ -353,8 +356,8 @@ ipcMain.on('widget:state-sync', (_event, state: {
   }
 })
 
-/** Fire a single trade for one symbol */
-function fireSingleTrade(side: 'long' | 'short', symbol: string, usdSize: number): void {
+/** Fire a single trade for one symbol. Awaitable so callers can sequence orders. */
+async function fireSingleTrade(side: 'long' | 'short', symbol: string, usdSize: number): Promise<void> {
   const market = MARKETS[symbol]
   if (!market) {
     console.error(`[global-shortcut] Unknown market: ${symbol}`)
@@ -371,29 +374,32 @@ function fireSingleTrade(side: 'long' | 'short', symbol: string, usdSize: number
 
   console.log(`[global-shortcut] ${side.toUpperCase()} ${symbol} — $${usdSize} @ $${price} (~${baseAmount?.toFixed(market.sizeDecimals) ?? 'min'} ${symbol})`)
 
-  fetch(`${API_URL}/api/trade`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      marketIndex: market.marketIndex,
-      side,
-      ...(baseAmount != null && { baseAmount }),
-      ...(usdSize > 0 && { usdSize }),
-      ...(price > 0 && { markPrice: price }),
-    }),
-  }).catch((err) => {
+  try {
+    await fetch(`${API_URL}/api/trade`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        marketIndex: market.marketIndex,
+        side,
+        ...(baseAmount != null && { baseAmount }),
+        ...(usdSize > 0 && { usdSize }),
+        ...(price > 0 && { markPrice: price }),
+      }),
+    })
+  } catch (err) {
     console.error(`[global-shortcut] trade failed for ${symbol}:`, err)
-  })
+  }
 }
 
 function fireTrade(side: 'long' | 'short'): void {
   const totalUsd = parseFloat(widgetState.usdSize) || 0
 
   if (widgetState.splitEnabled) {
-    // Split mode: fire trades for each enabled coin by its percentage
+    // Split mode: fire trades for each enabled coin by its percentage,
+    // dispatched in BTC → ETH → SOL priority order.
     const { splitConfig } = widgetState
-    const activeSymbols = Object.keys(splitConfig).filter(
-      (s) => splitConfig[s].enabled && splitConfig[s].pct > 0,
+    const activeSymbols = SYMBOL_PRIORITY.filter(
+      (s) => splitConfig[s]?.enabled && splitConfig[s].pct > 0,
     )
 
     if (activeSymbols.length === 0) {
@@ -403,16 +409,18 @@ function fireTrade(side: 'long' | 'short'): void {
 
     console.log(`[global-shortcut] SPLIT ${side.toUpperCase()} — $${totalUsd} across ${activeSymbols.join('/')}`)
 
-    for (const symbol of activeSymbols) {
-      const pct = splitConfig[symbol].pct / 100
-      const sliceUsd = Math.floor(totalUsd * pct)
-      if (sliceUsd >= 10) { // minQuote
-        fireSingleTrade(side, symbol, sliceUsd)
+    void (async () => {
+      for (const symbol of activeSymbols) {
+        const pct = splitConfig[symbol].pct / 100
+        const sliceUsd = Math.floor(totalUsd * pct)
+        if (sliceUsd >= 10) { // minQuote
+          await fireSingleTrade(side, symbol, sliceUsd)
+        }
       }
-    }
+    })()
   } else {
     // Normal mode: single symbol
-    fireSingleTrade(side, widgetState.activeTab, totalUsd)
+    void fireSingleTrade(side, widgetState.activeTab, totalUsd)
   }
 }
 
@@ -455,6 +463,7 @@ function registerGlobalShortcuts(): void {
   // Ctrl+1 → Long (selected symbol + size)
   const longOk = globalShortcut.register('Control+1', () => {
     console.log('[global-shortcut] Ctrl+1 → LONG')
+    mainWindow?.webContents.send('shortcut:fired', { action: 'long' })
     fireTrade('long')
   })
 
@@ -467,6 +476,7 @@ function registerGlobalShortcuts(): void {
   // Ctrl+4 → Short (selected symbol + size)
   const shortOk = globalShortcut.register('Control+4', () => {
     console.log('[global-shortcut] Ctrl+4 → SHORT')
+    mainWindow?.webContents.send('shortcut:fired', { action: 'short' })
     fireTrade('short')
   })
 

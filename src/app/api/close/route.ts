@@ -47,21 +47,21 @@ export async function POST(req: NextRequest) {
     const { closeAll, marketIndex, markPrice, markPrices } = await req.json()
 
     if (closeAll) {
-      // Capture positions + realized_pnl baseline before closing
-      const account = await withTiming(
+      // Parallelize positions + realized_pnl baseline (both hit the same
+      // endpoint but the parallel issue avoids paying RTT twice).
+      const [account, realizedBefore] = await withTiming(
         log,
-        'close.fetch_positions',
+        'close.fetch_positions_and_baseline',
         {},
-        () => fetchAccountData(cid),
+        () => Promise.all([fetchAccountData(cid), fetchRealizedPnlByMarket(cid)]),
       )
       const openPositions = [...account.positions]
-      const realizedBefore = await fetchRealizedPnlByMarket(cid)
 
       const results = await withTiming(
         log,
         'close.close_all',
         { positionCount: openPositions.length },
-        () => closeAllPositions(cid),
+        () => closeAllPositions(cid, openPositions),
       )
       const failed = results.filter((r) => !r.success)
 
@@ -83,12 +83,25 @@ export async function POST(req: NextRequest) {
 
       const parsedPrices: Record<number, number> | undefined =
         markPrices && typeof markPrices === 'object' ? markPrices : undefined
-      const realizedDiff = await pollRealizedDiff(
-        realizedBefore,
-        openPositions.map((p) => p.marketIndex),
-        cid,
-      )
-      notifyCloseAll(openPositions, parsedPrices, realizedDiff)
+
+      // Detached: poll for realized PnL settlement, then notify Discord.
+      // Returning the response immediately drops the API latency from
+      // ~3.5s to ~1s; the notification fires when the data is ready.
+      void (async () => {
+        try {
+          const realizedDiff = await pollRealizedDiff(
+            realizedBefore,
+            openPositions.map((p) => p.marketIndex),
+            cid,
+          )
+          notifyCloseAll(openPositions, parsedPrices, realizedDiff)
+        } catch (err) {
+          log.error('close.notify_close_all_failed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      })()
+
       return NextResponse.json({ success: true })
     }
 
@@ -100,15 +113,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Capture position + realized_pnl baseline before closing
-    const account = await withTiming(
+    // Parallelize position fetch + realized_pnl baseline.
+    const [account, realizedBefore] = await withTiming(
       log,
-      'close.fetch_position',
+      'close.fetch_position_and_baseline',
       { marketIndex },
-      () => fetchAccountData(cid),
+      () => Promise.all([fetchAccountData(cid), fetchRealizedPnlByMarket(cid)]),
     )
     const position = account.positions.find((p) => p.marketIndex === marketIndex)
-    const realizedBefore = await fetchRealizedPnlByMarket(cid)
 
     if (!position) {
       log.warn('close.position_not_found', { marketIndex })
@@ -118,7 +130,7 @@ export async function POST(req: NextRequest) {
       log,
       'close.close_position',
       { marketIndex },
-      () => closePosition(marketIndex, cid),
+      () => closePosition(marketIndex, cid, position),
     )
 
     if (!result.success) {
@@ -127,12 +139,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (position) {
-      const diff = await pollRealizedDiff(realizedBefore, [marketIndex], cid)
-      notifyPositionClose({
-        position,
-        closingPrice: typeof markPrice === 'number' ? markPrice : undefined,
-        realizedPnl: diff[marketIndex],
-      })
+      // Detached: poll for realized PnL settlement, then notify Discord.
+      // The response returns immediately; notification fires once the data lands.
+      void (async () => {
+        try {
+          const diff = await pollRealizedDiff(realizedBefore, [marketIndex], cid)
+          notifyPositionClose({
+            position,
+            closingPrice: typeof markPrice === 'number' ? markPrice : undefined,
+            realizedPnl: diff[marketIndex],
+          })
+        } catch (err) {
+          log.error('close.notify_position_close_failed', {
+            error: err instanceof Error ? err.message : String(err),
+            marketIndex,
+          })
+        }
+      })()
     }
 
     return NextResponse.json(result)

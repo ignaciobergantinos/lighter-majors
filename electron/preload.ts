@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('shortcuts:status', listener)
   },
 
+  /** Listen for global shortcut fire events (from main process) so the renderer can play feedback */
+  onShortcutFired: (callback: (event: { action: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { action: string }) => callback(payload)
+    ipcRenderer.on('shortcut:fired', listener)
+    return () => ipcRenderer.removeListener('shortcut:fired', listener)
+  },
+
   /** Load persisted user preferences from disk (async) */
   loadPreferences: (): Promise<Record<string, unknown> | null> =>
     ipcRenderer.invoke('preferences:load'),
