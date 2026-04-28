@@ -43,9 +43,12 @@ export function usePriceFeed() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data)
-          if (msg.type !== 'update/market_stats') return
+          // Accept the initial snapshot (subscribed/...) and live ticks (update/...).
+          // Lighter wraps the payload in `market_stats`; legacy `data` kept as a fallback.
+          if (msg.type !== 'update/market_stats' && msg.type !== 'subscribed/market_stats') return
 
-          const d = msg.data
+          const d = msg.market_stats ?? msg.data
+          if (!d) return
           const marketId = d.market_id ?? d.market_index
           const symbol = symbolByIndex[marketId]
           if (!symbol) return
