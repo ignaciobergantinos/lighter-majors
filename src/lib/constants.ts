@@ -49,7 +49,7 @@ export const MARKETS: Record<MarketSymbol, MarketConfig> = {
 }
 
 /** User-tradeable majors — what shows in tabs and the regular trade UI. */
-export const MARKET_SYMBOLS: MarketSymbol[] = ['BTC', 'ETH', 'SOL']
+export const MARKET_SYMBOLS: MarketSymbol[] = ['BTC', 'ETH', 'SOL', 'WTI']
 
 /** Symbols that can participate in a split order. WTI rides as an inverse hedge. */
 export const SPLIT_SYMBOLS: MarketSymbol[] = ['BTC', 'ETH', 'SOL', 'WTI']
