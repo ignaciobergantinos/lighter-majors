@@ -12,12 +12,12 @@ import { useViewportSize } from '@/hooks/useViewportSize'
 import { PairTabs } from './PairTabs'
 import { SplitConfig } from './SplitConfig'
 import { DesktopTitleBar } from './DesktopTitleBar'
-import { MARKETS, MARKET_SYMBOLS } from '@/lib/constants'
+import { MARKETS, SPLIT_SYMBOLS, INVERSE_HEDGE_SYMBOLS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
 import { aggregateLivePnl, livePnlFor } from '@/lib/pnl'
 
 export function DesktopTradeWidget() {
-  const { activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
+  const { activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, wtiHedgeEnabled, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
   const { positions, balance, isLoading } = usePositions()
@@ -41,8 +41,9 @@ export function DesktopTradeWidget() {
       markPrice: markPrice || undefined,
       splitEnabled,
       splitConfig,
+      wtiHedgeEnabled,
     })
-  }, [activeTab, usdSize, markPrice, splitEnabled, splitConfig])
+  }, [activeTab, usdSize, markPrice, splitEnabled, splitConfig, wtiHedgeEnabled])
 
   const getBaseAmount = useCallback((): number | undefined => {
     const usd = parseFloat(usdSize)
@@ -62,7 +63,7 @@ export function DesktopTradeWidget() {
         for (const [sym, tick] of Object.entries(prices)) {
           if (tick) mps[sym as MarketSymbol] = parseFloat(tick.markPrice)
         }
-        placeSplitTrade({ side, totalUsdSize: totalUsd, markPrices: mps, splitConfig })
+        placeSplitTrade({ side, totalUsdSize: totalUsd, markPrices: mps, splitConfig, wtiHedgeEnabled })
       } else {
         placeTrade({
           symbol: activeTab,
@@ -73,7 +74,7 @@ export function DesktopTradeWidget() {
         })
       }
     },
-    [placeTrade, placeSplitTrade, splitEnabled, splitConfig, activeTab, getBaseAmount, usdSize, markPrice, prices],
+    [placeTrade, placeSplitTrade, splitEnabled, splitConfig, wtiHedgeEnabled, activeTab, getBaseAmount, usdSize, markPrice, prices],
   )
 
   const pnl = useMemo(() => aggregateLivePnl(positions, prices), [positions, prices])
@@ -326,7 +327,10 @@ export function DesktopTradeWidget() {
             </span>
             {splitEnabled && (
               <span className="text-[8px] sm:text-[9px] text-amber-500/70">
-                {MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled).map((s) => `${splitConfig[s].pct}${s[0]}`).join('/')}
+                {SPLIT_SYMBOLS
+                  .filter((s) => (!INVERSE_HEDGE_SYMBOLS.includes(s) || wtiHedgeEnabled) && splitConfig[s].enabled)
+                  .map((s) => `${INVERSE_HEDGE_SYMBOLS.includes(s) ? '-' : ''}${splitConfig[s].pct}${s[0]}`)
+                  .join('/')}
               </span>
             )}
           </label>

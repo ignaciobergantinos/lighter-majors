@@ -17,6 +17,7 @@ interface ElectronAPI {
     markPrice?: number
     splitEnabled?: boolean
     splitConfig?: Record<string, { enabled: boolean; pct: number }>
+    wtiHedgeEnabled?: boolean
   }) => void
   onShortcutsStatus: (callback: (status: ShortcutsStatus) => void) => () => void
   onShortcutFired: (callback: (event: { action: string }) => void) => () => void

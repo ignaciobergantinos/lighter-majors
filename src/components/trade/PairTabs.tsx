@@ -8,6 +8,7 @@ const SHORT_LABELS: Record<MarketSymbol, string> = {
   BTC: 'B',
   ETH: 'E',
   SOL: 'S',
+  WTI: 'W',
 }
 
 interface PairTabsProps {
@@ -25,6 +26,7 @@ const PILL_COLORS: Record<MarketSymbol, string> = {
   BTC: 'data-[active=true]:bg-orange-500/20 data-[active=true]:text-orange-400',
   ETH: 'data-[active=true]:bg-blue-500/20 data-[active=true]:text-blue-400',
   SOL: 'data-[active=true]:bg-purple-500/20 data-[active=true]:text-purple-400',
+  WTI: 'data-[active=true]:bg-red-500/20 data-[active=true]:text-red-400',
 }
 
 export function PairTabs({ active, onSelect, compact, ultraCompact, disabled }: PairTabsProps) {
