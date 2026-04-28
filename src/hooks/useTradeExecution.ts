@@ -52,30 +52,35 @@ interface SplitTradeParams {
   splitConfig: Record<MarketSymbol, SplitCoinConfig>
 }
 
-/** Place split orders for all enabled coins with their configured percentages */
+/** Place split orders for all enabled coins with their configured percentages.
+ *  Dispatches sequentially in MARKET_SYMBOLS priority order (BTC → ETH → SOL)
+ *  so the server sees orders in a deterministic sequence — avoids nonce races
+ *  and matches the user's preferred priority. */
 async function executeSplitTrade(params: SplitTradeParams): Promise<TradeResponse> {
   const { side, totalUsdSize, markPrices, splitConfig } = params
   const errors: string[] = []
 
-  // Only trade enabled coins
+  // Only trade enabled coins, preserving MARKET_SYMBOLS order (BTC, ETH, SOL)
   const activeSymbols = MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled && splitConfig[s].pct > 0)
   if (activeSymbols.length === 0) {
     throw new Error('No coins enabled for split')
   }
 
-  const results = await Promise.allSettled(
-    activeSymbols.map(async (symbol) => {
-      const pct = splitConfig[symbol].pct / 100
-      const usdSize = Math.floor(totalUsdSize * pct)
-      const market = MARKETS[symbol]
-      const price = markPrices[symbol]
+  let dispatched = 0
+  for (const symbol of activeSymbols) {
+    const pct = splitConfig[symbol].pct / 100
+    const usdSize = Math.floor(totalUsdSize * pct)
+    const market = MARKETS[symbol]
+    const price = markPrices[symbol]
 
-      if (!price || price <= 0 || usdSize < market.minQuote) return null
+    if (!price || price <= 0 || usdSize < market.minQuote) continue
 
-      const base = usdSize / price
-      const baseAmount = parseFloat(base.toFixed(market.sizeDecimals))
-      if (baseAmount < market.minBaseAmount) return null
+    const base = usdSize / price
+    const baseAmount = parseFloat(base.toFixed(market.sizeDecimals))
+    if (baseAmount < market.minBaseAmount) continue
 
+    dispatched++
+    try {
       const res = await fetch('/api/trade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,16 +92,14 @@ async function executeSplitTrade(params: SplitTradeParams): Promise<TradeRespons
           markPrice: price,
         }),
       })
-      return parseTradeResponse(res)
-    }),
-  )
-
-  for (const r of results) {
-    if (r.status === 'rejected') errors.push(r.reason?.message ?? 'Unknown error')
-    else if (r.value && !r.value.success) errors.push(r.value.error ?? 'Order failed')
+      const parsed = await parseTradeResponse(res)
+      if (!parsed.success) errors.push(parsed.error ?? 'Order failed')
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : 'Unknown error')
+    }
   }
 
-  if (errors.length === activeSymbols.length) {
+  if (dispatched > 0 && errors.length === dispatched) {
     throw new Error(`All split orders failed: ${errors.join('; ')}`)
   }
 

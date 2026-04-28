@@ -19,6 +19,7 @@ interface ElectronAPI {
     splitConfig?: Record<string, { enabled: boolean; pct: number }>
   }) => void
   onShortcutsStatus: (callback: (status: ShortcutsStatus) => void) => () => void
+  onShortcutFired: (callback: (event: { action: string }) => void) => () => void
 }
 
 declare global {

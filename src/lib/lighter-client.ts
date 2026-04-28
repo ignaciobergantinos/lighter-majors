@@ -162,7 +162,10 @@ export async function placeMarketOrder(
   // it never recovers from "invalid nonce" errors on its own.
   const client = await ensureSignerReady()
 
-  const MAX_ATTEMPTS = 2
+  // Up to 3 retries on "invalid nonce" — the SDK's nonce manager occasionally
+  // desyncs from the server (especially under bursty / parallel order flow),
+  // and a refresh + small backoff is enough to recover.
+  const MAX_ATTEMPTS = 4
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -181,7 +184,7 @@ export async function placeMarketOrder(
         // The SDK returns "invalid nonce" as a string error (not an exception)
         // when the server rejects the nonce. The SDK's built-in recovery is
         // broken (checks error.message instead of error.response.data.message),
-        // so we force a nonce refresh and retry once.
+        // so we force a nonce refresh and retry up to MAX_ATTEMPTS times.
         if (typeof error === 'string' && error.includes('invalid nonce') && attempt < MAX_ATTEMPTS) {
           log.warn('lighter_sdk.create_market_order.invalid_nonce_retry', {
             durationMs,
@@ -189,6 +192,7 @@ export async function placeMarketOrder(
             marketIndex,
           })
           await refreshNonce()
+          await new Promise((r) => setTimeout(r, 150 * attempt))
           continue
         }
 
@@ -226,6 +230,7 @@ export async function placeMarketOrder(
           marketIndex,
         })
         await refreshNonce()
+        await new Promise((r) => setTimeout(r, 150 * attempt))
         continue
       }
 
@@ -250,12 +255,17 @@ export async function placeMarketOrder(
 export async function closePosition(
   marketIndex: number,
   cid?: string,
+  /** Optional pre-fetched position — skips the redundant account fetch when provided. */
+  position?: Position,
 ): Promise<TradeResponse> {
   const log = createLogger(cid ?? 'no-cid')
 
-  // Close = place opposite market order for full size
-  const account = await fetchAccountData(cid)
-  const pos = account.positions.find((p) => p.marketIndex === marketIndex)
+  let pos = position
+  if (!pos) {
+    // Close = place opposite market order for full size
+    const account = await fetchAccountData(cid)
+    pos = account.positions.find((p) => p.marketIndex === marketIndex)
+  }
 
   if (!pos) {
     log.warn('lighter_api.close_position.no_position', { marketIndex })
@@ -276,14 +286,18 @@ export async function closePosition(
   return placeMarketOrder(marketIndex, isAsk, size, cid, true)
 }
 
-export async function closeAllPositions(cid?: string): Promise<TradeResponse[]> {
-  const account = await fetchAccountData(cid)
+export async function closeAllPositions(
+  cid?: string,
+  /** Optional pre-fetched positions — skips the redundant account fetch when provided. */
+  positions?: Position[],
+): Promise<TradeResponse[]> {
+  const list = positions ?? (await fetchAccountData(cid)).positions
   // Serialize close orders to avoid nonce collisions.
   // The SDK's OptimisticNonceManager increments a local counter,
   // but parallel requests can race and reuse the same nonce.
   const results: TradeResponse[] = []
-  for (const p of account.positions) {
-    results.push(await closePosition(p.marketIndex, cid))
+  for (const p of list) {
+    results.push(await closePosition(p.marketIndex, cid, p))
   }
   return results
 }
