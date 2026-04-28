@@ -234,10 +234,14 @@ const MARKETS: Record<string, { marketIndex: number; minBaseAmount: number; size
   BTC: { marketIndex: 1, minBaseAmount: 0.0002, sizeDecimals: 5, priceDecimals: 1 },
   ETH: { marketIndex: 0, minBaseAmount: 0.005, sizeDecimals: 4, priceDecimals: 2 },
   SOL: { marketIndex: 2, minBaseAmount: 0.05, sizeDecimals: 3, priceDecimals: 3 },
+  WTI: { marketIndex: 145, minBaseAmount: 0.1, sizeDecimals: 3, priceDecimals: 3 },
 }
 
-// Priority order for split orders (BTC first, then ETH, then SOL)
-const SYMBOL_PRIORITY = ['BTC', 'ETH', 'SOL'] as const
+// Priority order for split orders. WTI rides last as an inverse hedge.
+const SYMBOL_PRIORITY = ['BTC', 'ETH', 'SOL', 'WTI'] as const
+
+// Symbols whose split direction is inverted from the requested side.
+const INVERSE_HEDGE_SYMBOLS: readonly string[] = ['WTI']
 
 // Cached widget state from renderer — updated via IPC
 let widgetState: {
@@ -246,6 +250,7 @@ let widgetState: {
   markPrice: number
   splitEnabled: boolean
   splitConfig: Record<string, { enabled: boolean; pct: number }>
+  wtiHedgeEnabled: boolean
 } = {
   activeTab: 'BTC',
   usdSize: '10',
@@ -255,11 +260,13 @@ let widgetState: {
     BTC: { enabled: true, pct: 70 },
     ETH: { enabled: true, pct: 30 },
     SOL: { enabled: false, pct: 0 },
+    WTI: { enabled: false, pct: 0 },
   },
+  wtiHedgeEnabled: false,
 }
 
 // Cached prices per symbol — fetched independently from Lighter REST API
-const cachedPrices: Record<string, number> = { BTC: 0, ETH: 0, SOL: 0 }
+const cachedPrices: Record<string, number> = { BTC: 0, ETH: 0, SOL: 0, WTI: 0 }
 let pricePollTimer: ReturnType<typeof setInterval> | null = null
 
 /** Fetch the current mark price for a symbol from the Lighter REST API */
@@ -326,6 +333,7 @@ ipcMain.on('widget:state-sync', (_event, state: {
   markPrice?: number
   splitEnabled?: boolean
   splitConfig?: Record<string, { enabled: boolean; pct: number }>
+  wtiHedgeEnabled?: boolean
 }) => {
   const prevTab = widgetState.activeTab
   widgetState = {
@@ -333,6 +341,7 @@ ipcMain.on('widget:state-sync', (_event, state: {
     ...state,
     splitEnabled: state.splitEnabled ?? widgetState.splitEnabled,
     splitConfig: state.splitConfig ?? widgetState.splitConfig,
+    wtiHedgeEnabled: state.wtiHedgeEnabled ?? widgetState.wtiHedgeEnabled,
   }
 
   // If renderer sends a valid price, update our cache too
@@ -396,26 +405,30 @@ function fireTrade(side: 'long' | 'short'): void {
 
   if (widgetState.splitEnabled) {
     // Split mode: fire trades for each enabled coin by its percentage,
-    // dispatched in BTC → ETH → SOL priority order.
-    const { splitConfig } = widgetState
-    const activeSymbols = SYMBOL_PRIORITY.filter(
-      (s) => splitConfig[s]?.enabled && splitConfig[s].pct > 0,
-    )
+    // dispatched in BTC → ETH → SOL → WTI priority order. WTI rides as
+    // an inverse hedge when wtiHedgeEnabled is on.
+    const { splitConfig, wtiHedgeEnabled } = widgetState
+    const activeSymbols = SYMBOL_PRIORITY.filter((s) => {
+      if (INVERSE_HEDGE_SYMBOLS.includes(s) && !wtiHedgeEnabled) return false
+      return splitConfig[s]?.enabled && splitConfig[s].pct > 0
+    })
 
     if (activeSymbols.length === 0) {
       console.warn('[global-shortcut] Split mode on but no coins enabled')
       return
     }
 
-    console.log(`[global-shortcut] SPLIT ${side.toUpperCase()} — $${totalUsd} across ${activeSymbols.join('/')}`)
+    console.log(`[global-shortcut] SPLIT ${side.toUpperCase()} — $${totalUsd} across ${activeSymbols.join('/')}${wtiHedgeEnabled ? ' (WTI inverse hedge)' : ''}`)
 
     void (async () => {
       for (const symbol of activeSymbols) {
         const pct = splitConfig[symbol].pct / 100
         const sliceUsd = Math.floor(totalUsd * pct)
-        if (sliceUsd >= 10) { // minQuote
-          await fireSingleTrade(side, symbol, sliceUsd)
-        }
+        if (sliceUsd < 10) continue // minQuote
+        const orderSide: 'long' | 'short' = INVERSE_HEDGE_SYMBOLS.includes(symbol)
+          ? (side === 'long' ? 'short' : 'long')
+          : side
+        await fireSingleTrade(orderSide, symbol, sliceUsd)
       }
     })()
   } else {

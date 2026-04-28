@@ -10,12 +10,12 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useAutoSize } from '@/hooks/useAutoSize'
 import { PairTabs } from './PairTabs'
 import { SplitConfig } from './SplitConfig'
-import { MARKETS, MARKET_SYMBOLS } from '@/lib/constants'
+import { MARKETS, SPLIT_SYMBOLS, INVERSE_HEDGE_SYMBOLS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
 import { aggregateLivePnl, livePnlFor } from '@/lib/pnl'
 
 export function FloatingTradeWidget() {
-  const { isOpen, isPinned, activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, toggleWidget, togglePinned, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
+  const { isOpen, isPinned, activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, wtiHedgeEnabled, toggleWidget, togglePinned, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
   const { positions, balance, isLoading } = usePositions()
@@ -51,7 +51,7 @@ export function FloatingTradeWidget() {
         for (const [sym, tick] of Object.entries(prices)) {
           if (tick) mps[sym as MarketSymbol] = parseFloat(tick.markPrice)
         }
-        placeSplitTrade({ side, totalUsdSize: totalUsd, markPrices: mps, splitConfig })
+        placeSplitTrade({ side, totalUsdSize: totalUsd, markPrices: mps, splitConfig, wtiHedgeEnabled })
       } else {
         placeTrade({
           symbol: activeTab,
@@ -62,7 +62,7 @@ export function FloatingTradeWidget() {
         })
       }
     },
-    [placeTrade, placeSplitTrade, splitEnabled, splitConfig, activeTab, getBaseAmount, usdSize, markPrice, prices],
+    [placeTrade, placeSplitTrade, splitEnabled, splitConfig, wtiHedgeEnabled, activeTab, getBaseAmount, usdSize, markPrice, prices],
   )
 
   const pnl = useMemo(() => aggregateLivePnl(positions, prices), [positions, prices])
@@ -344,7 +344,10 @@ export function FloatingTradeWidget() {
                 </span>
                 {splitEnabled && (
                   <span className="text-[9px] text-amber-500/70">
-                    {MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled).map((s) => `${splitConfig[s].pct}${s[0]}`).join('/')}
+                    {SPLIT_SYMBOLS
+                      .filter((s) => (!INVERSE_HEDGE_SYMBOLS.includes(s) || wtiHedgeEnabled) && splitConfig[s].enabled)
+                      .map((s) => `${INVERSE_HEDGE_SYMBOLS.includes(s) ? '-' : ''}${splitConfig[s].pct}${s[0]}`)
+                      .join('/')}
                   </span>
                 )}
               </label>

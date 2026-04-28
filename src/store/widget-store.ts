@@ -8,6 +8,7 @@ const defaultUsdSizes: Record<MarketSymbol, string> = {
   BTC: String(MARKETS.BTC.minQuote),
   ETH: String(MARKETS.ETH.minQuote),
   SOL: String(MARKETS.SOL.minQuote),
+  WTI: String(MARKETS.WTI.minQuote),
 }
 
 interface WidgetState {
@@ -25,6 +26,8 @@ interface WidgetState {
   splitEnabled: boolean
   /** Per-coin split configuration (enabled + percentage) */
   splitConfig: Record<MarketSymbol, SplitCoinConfig>
+  /** Whether WTI rides the split as an inverse hedge (long crypto → short WTI, etc.) */
+  wtiHedgeEnabled: boolean
 
   toggleWidget: () => void
   setOpen: (open: boolean) => void
@@ -37,6 +40,7 @@ interface WidgetState {
   toggleSplit: () => void
   toggleSplitCoin: (symbol: MarketSymbol) => void
   setSplitPct: (symbol: MarketSymbol, pct: number) => void
+  toggleWtiHedge: () => void
 }
 
 // ── Electron-aware storage adapter ─────────────────────────
@@ -115,7 +119,7 @@ export const useWidgetStore = create<WidgetState>()(
       isOpen: false,
       isPinned: true,
       activeTab: 'BTC',
-      prices: { BTC: null, ETH: null, SOL: null },
+      prices: { BTC: null, ETH: null, SOL: null, WTI: null },
       usdSizes: { ...defaultUsdSizes },
       soundEnabled: true,
       autoSizeEnabled: true,
@@ -124,7 +128,9 @@ export const useWidgetStore = create<WidgetState>()(
         BTC: { enabled: true, pct: 70 },
         ETH: { enabled: true, pct: 30 },
         SOL: { enabled: false, pct: 0 },
+        WTI: { enabled: false, pct: 0 },
       },
+      wtiHedgeEnabled: false,
 
       toggleWidget: () => set((s) => ({ isOpen: !s.isOpen })),
       setOpen: (open) => set({ isOpen: open }),
@@ -153,6 +159,7 @@ export const useWidgetStore = create<WidgetState>()(
             [symbol]: { ...s.splitConfig[symbol], pct },
           },
         })),
+      toggleWtiHedge: () => set((s) => ({ wtiHedgeEnabled: !s.wtiHedgeEnabled })),
     }),
     {
       name: 'lighter-widget',
@@ -166,7 +173,19 @@ export const useWidgetStore = create<WidgetState>()(
         autoSizeEnabled: state.autoSizeEnabled,
         splitEnabled: state.splitEnabled,
         splitConfig: state.splitConfig,
+        wtiHedgeEnabled: state.wtiHedgeEnabled,
       }),
+      // Deep-merge persisted prefs into current defaults so stores saved
+      // before a new symbol/key existed (e.g. WTI) hydrate without holes.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<WidgetState>
+        return {
+          ...current,
+          ...p,
+          splitConfig: { ...current.splitConfig, ...(p.splitConfig ?? {}) },
+          usdSizes: { ...current.usdSizes, ...(p.usdSizes ?? {}) },
+        }
+      },
     },
   ),
 )

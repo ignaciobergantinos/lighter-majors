@@ -38,9 +38,24 @@ export const MARKETS: Record<MarketSymbol, MarketConfig> = {
     minBaseAmount: 0.05,
     minQuote: 10,
   },
+  WTI: {
+    symbol: 'WTI',
+    marketIndex: 145,
+    sizeDecimals: 3,
+    priceDecimals: 3,
+    minBaseAmount: 0.1,
+    minQuote: 10,
+  },
 }
 
+/** User-tradeable majors — what shows in tabs and the regular trade UI. */
 export const MARKET_SYMBOLS: MarketSymbol[] = ['BTC', 'ETH', 'SOL']
+
+/** Symbols that can participate in a split order. WTI rides as an inverse hedge. */
+export const SPLIT_SYMBOLS: MarketSymbol[] = ['BTC', 'ETH', 'SOL', 'WTI']
+
+/** Symbols whose split direction is inverted from the requested side. */
+export const INVERSE_HEDGE_SYMBOLS: MarketSymbol[] = ['WTI']
 
 /** Default leverage multiplier for auto-sizing (balance × this = USD size) */
 export const SIZE_MULTIPLIER = 40

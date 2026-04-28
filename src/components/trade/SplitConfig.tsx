@@ -1,6 +1,6 @@
 // ── Split Order Configuration Panel ─────────────────────────
 'use client'
-import { MARKET_SYMBOLS } from '@/lib/constants'
+import { SPLIT_SYMBOLS, INVERSE_HEDGE_SYMBOLS } from '@/lib/constants'
 import { useWidgetStore } from '@/store/widget-store'
 import type { MarketSymbol } from '@/lib/types'
 
@@ -8,23 +8,47 @@ const COIN_COLORS: Record<MarketSymbol, { active: string; label: string }> = {
   BTC: { active: 'accent-orange-500', label: 'text-orange-400' },
   ETH: { active: 'accent-blue-500', label: 'text-blue-400' },
   SOL: { active: 'accent-purple-500', label: 'text-purple-400' },
+  WTI: { active: 'accent-red-500', label: 'text-red-400' },
 }
 
 export function SplitConfig() {
-  const { splitConfig, toggleSplitCoin, setSplitPct } = useWidgetStore()
+  const {
+    splitConfig,
+    toggleSplitCoin,
+    setSplitPct,
+    wtiHedgeEnabled,
+    toggleWtiHedge,
+  } = useWidgetStore()
 
-  const totalPct = MARKET_SYMBOLS.reduce(
+  const visibleSymbols = SPLIT_SYMBOLS.filter(
+    (s) => !INVERSE_HEDGE_SYMBOLS.includes(s) || wtiHedgeEnabled,
+  )
+  const totalPct = visibleSymbols.reduce(
     (sum, s) => sum + (splitConfig[s].enabled ? splitConfig[s].pct : 0),
     0,
   )
   const isValid = totalPct === 100
-  const enabledCount = MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled).length
+  const enabledCount = visibleSymbols.filter((s) => splitConfig[s].enabled).length
 
   return (
     <div className="space-y-1.5 px-0.5">
-      {MARKET_SYMBOLS.map((symbol) => {
+      {/* WTI inverse-hedge master toggle */}
+      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={wtiHedgeEnabled}
+          onChange={toggleWtiHedge}
+          className="w-3 h-3 rounded border-zinc-700 bg-zinc-900 cursor-pointer accent-red-500"
+        />
+        <span className="text-[10px] text-zinc-500">
+          WTI hedge <span className="text-zinc-600">(inverse)</span>
+        </span>
+      </label>
+
+      {visibleSymbols.map((symbol) => {
         const cfg = splitConfig[symbol]
         const colors = COIN_COLORS[symbol]
+        const isInverse = INVERSE_HEDGE_SYMBOLS.includes(symbol)
         return (
           <div key={symbol} className="flex items-center gap-2">
             {/* Coin toggle */}
@@ -37,6 +61,9 @@ export function SplitConfig() {
               />
               <span className={`text-[10px] font-semibold ${cfg.enabled ? colors.label : 'text-zinc-600'}`}>
                 {symbol}
+                {isInverse && (
+                  <span className="ml-1 text-[8px] font-normal text-zinc-500">inv</span>
+                )}
               </span>
             </label>
 

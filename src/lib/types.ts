@@ -1,6 +1,6 @@
 // ── Lighter Exchange Types ──────────────────────────────────
 
-export type MarketSymbol = 'BTC' | 'ETH' | 'SOL'
+export type MarketSymbol = 'BTC' | 'ETH' | 'SOL' | 'WTI'
 
 export interface MarketConfig {
   symbol: MarketSymbol

@@ -2,7 +2,7 @@
 'use client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { MarketSymbol, TradeResponse, SplitCoinConfig } from '@/lib/types'
-import { MARKETS, MARKET_SYMBOLS } from '@/lib/constants'
+import { MARKETS, SPLIT_SYMBOLS, INVERSE_HEDGE_SYMBOLS } from '@/lib/constants'
 import { playSuccessSound, playErrorSound } from '@/lib/audio'
 import { useWidgetStore } from '@/store/widget-store'
 
@@ -50,18 +50,25 @@ interface SplitTradeParams {
   markPrices: Partial<Record<MarketSymbol, number>>
   /** Per-coin split configuration from the store */
   splitConfig: Record<MarketSymbol, SplitCoinConfig>
+  /** Whether WTI rides as an inverse hedge (long crypto → short WTI). */
+  wtiHedgeEnabled?: boolean
 }
 
+const oppositeSide = (s: 'long' | 'short'): 'long' | 'short' =>
+  s === 'long' ? 'short' : 'long'
+
 /** Place split orders for all enabled coins with their configured percentages.
- *  Dispatches sequentially in MARKET_SYMBOLS priority order (BTC → ETH → SOL)
- *  so the server sees orders in a deterministic sequence — avoids nonce races
- *  and matches the user's preferred priority. */
+ *  Dispatches sequentially in SPLIT_SYMBOLS priority order (BTC → ETH → SOL → WTI)
+ *  so the server sees orders in a deterministic sequence — avoids nonce races.
+ *  Inverse-hedge symbols (WTI) flip side from the requested direction. */
 async function executeSplitTrade(params: SplitTradeParams): Promise<TradeResponse> {
-  const { side, totalUsdSize, markPrices, splitConfig } = params
+  const { side, totalUsdSize, markPrices, splitConfig, wtiHedgeEnabled = false } = params
   const errors: string[] = []
 
-  // Only trade enabled coins, preserving MARKET_SYMBOLS order (BTC, ETH, SOL)
-  const activeSymbols = MARKET_SYMBOLS.filter((s) => splitConfig[s].enabled && splitConfig[s].pct > 0)
+  const activeSymbols = SPLIT_SYMBOLS.filter((s) => {
+    if (INVERSE_HEDGE_SYMBOLS.includes(s) && !wtiHedgeEnabled) return false
+    return splitConfig[s].enabled && splitConfig[s].pct > 0
+  })
   if (activeSymbols.length === 0) {
     throw new Error('No coins enabled for split')
   }
@@ -79,6 +86,8 @@ async function executeSplitTrade(params: SplitTradeParams): Promise<TradeRespons
     const baseAmount = parseFloat(base.toFixed(market.sizeDecimals))
     if (baseAmount < market.minBaseAmount) continue
 
+    const orderSide = INVERSE_HEDGE_SYMBOLS.includes(symbol) ? oppositeSide(side) : side
+
     dispatched++
     try {
       const res = await fetch('/api/trade', {
@@ -86,7 +95,7 @@ async function executeSplitTrade(params: SplitTradeParams): Promise<TradeRespons
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           marketIndex: market.marketIndex,
-          side,
+          side: orderSide,
           baseAmount,
           usdSize,
           markPrice: price,
