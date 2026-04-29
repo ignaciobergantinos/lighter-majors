@@ -60,6 +60,9 @@ export const INVERSE_HEDGE_SYMBOLS: MarketSymbol[] = ['WTI']
 /** Default leverage multiplier for auto-sizing (balance × this = USD size) */
 export const SIZE_MULTIPLIER = 40
 
+/** Auto-size multiplier used by the standalone WTI floating window. */
+export const WTI_SIZE_MULTIPLIER = 20
+
 
 export const POLL_INTERVAL_MS = 5_000
 export const WS_RECONNECT_MS = 3_000
