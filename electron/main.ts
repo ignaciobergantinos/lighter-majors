@@ -17,6 +17,8 @@ import {
   saveWindowState,
   clearWindowState,
   getDefaultBounds,
+  MAIN_WINDOW_CONFIG,
+  WTI_WINDOW_CONFIG,
 } from './window-state'
 import {
   loadPreferences,
@@ -26,9 +28,11 @@ import {
 
 // ── Config ──────────────────────────────────────────────────
 const DEV_SERVER_URL = 'http://localhost:3000/desktop'
+const WTI_DEV_URL = 'http://localhost:3000/desktop/wti'
 const IS_DEV = !app.isPackaged
 
 let mainWindow: BrowserWindow | null = null
+let wtiWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
 // ── Single Instance Lock ────────────────────────────────────
@@ -47,7 +51,7 @@ if (!gotLock) {
 // ── Create Main Window ──────────────────────────────────────
 function createWindow(): void {
   // Restore saved position + dimensions, or fall back to defaults
-  const savedBounds = loadWindowState()
+  const savedBounds = loadWindowState(MAIN_WINDOW_CONFIG)
 
   mainWindow = new BrowserWindow({
     width: savedBounds.width,
@@ -86,7 +90,7 @@ function createWindow(): void {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        saveWindowState(mainWindow.getBounds())
+        saveWindowState(MAIN_WINDOW_CONFIG, mainWindow.getBounds())
       }
     }, 500)
   }
@@ -120,6 +124,78 @@ function createWindow(): void {
     if (process.platform === 'darwin' && tray) {
       event.preventDefault()
       mainWindow?.hide()
+    }
+  })
+}
+
+// ── Create WTI Quick-Action Window ──────────────────────────
+function createWtiWindow(): void {
+  const savedBounds = loadWindowState(WTI_WINDOW_CONFIG)
+
+  wtiWindow = new BrowserWindow({
+    width: savedBounds.width,
+    height: savedBounds.height,
+    x: savedBounds.x,
+    y: savedBounds.y,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: true,
+    minimizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: true,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    titleBarStyle: 'hidden',
+    minWidth: 180,
+    minHeight: 110,
+    maxWidth: 400,
+    maxHeight: 220,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+  const debouncedSave = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (wtiWindow && !wtiWindow.isDestroyed()) {
+        saveWindowState(WTI_WINDOW_CONFIG, wtiWindow.getBounds())
+      }
+    }, 500)
+  }
+
+  wtiWindow.on('moved', debouncedSave)
+  wtiWindow.on('resized', debouncedSave)
+
+  wtiWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  if (IS_DEV) {
+    wtiWindow.loadURL(WTI_DEV_URL)
+  } else {
+    wtiWindow.loadFile(path.join(__dirname, '../out/desktop/wti.html'))
+  }
+
+  wtiWindow.once('ready-to-show', () => {
+    wtiWindow?.show()
+  })
+
+  wtiWindow.on('closed', () => {
+    wtiWindow = null
+  })
+
+  // Hide instead of close, so the tray toggle keeps working
+  wtiWindow.on('close', (event) => {
+    if (process.platform === 'darwin' && tray) {
+      event.preventDefault()
+      wtiWindow?.hide()
     }
   })
 }
@@ -158,11 +234,23 @@ function createTray(): void {
       },
     },
     {
+      label: 'Show WTI Window',
+      click: () => {
+        if (!wtiWindow || wtiWindow.isDestroyed()) {
+          createWtiWindow()
+        } else {
+          wtiWindow.show()
+          wtiWindow.focus()
+        }
+      },
+    },
+    {
       label: 'Always on Top',
       type: 'checkbox',
       checked: true,
       click: (menuItem) => {
         mainWindow?.setAlwaysOnTop(menuItem.checked)
+        wtiWindow?.setAlwaysOnTop(menuItem.checked)
       },
     },
     {
@@ -173,24 +261,27 @@ function createTray(): void {
         mainWindow?.setVisibleOnAllWorkspaces(menuItem.checked, {
           visibleOnFullScreen: true,
         })
+        wtiWindow?.setVisibleOnAllWorkspaces(menuItem.checked, {
+          visibleOnFullScreen: true,
+        })
       },
     },
     { type: 'separator' },
     {
       label: 'Reset Position',
       click: () => {
-        const defaults = getDefaultBounds()
+        const defaults = getDefaultBounds(MAIN_WINDOW_CONFIG)
         mainWindow?.setBounds(defaults)
-        clearWindowState()
+        clearWindowState(MAIN_WINDOW_CONFIG)
       },
     },
     {
       label: 'Reset Size',
       click: () => {
-        const { width, height } = getDefaultBounds()
+        const { width, height } = getDefaultBounds(MAIN_WINDOW_CONFIG)
         mainWindow?.setSize(width, height)
         if (mainWindow && !mainWindow.isDestroyed()) {
-          saveWindowState(mainWindow.getBounds())
+          saveWindowState(MAIN_WINDOW_CONFIG, mainWindow.getBounds())
         }
       },
     },
@@ -219,8 +310,10 @@ function createTray(): void {
 }
 
 // ── IPC Handlers ────────────────────────────────────────────
-ipcMain.on('window:minimize-to-tray', () => {
-  mainWindow?.hide()
+ipcMain.on('window:minimize-to-tray', (event) => {
+  // Hide whichever window sent the request — works for both main + WTI windows.
+  const win = BrowserWindow.fromWebContents(event.sender)
+  win?.hide()
 })
 
 ipcMain.on('app:quit', () => {
@@ -530,6 +623,7 @@ function registerGlobalShortcuts(): void {
 app.whenReady().then(() => {
   createTray()
   createWindow()
+  createWtiWindow()
   registerGlobalShortcuts()
   startPricePolling() // Fetch prices on startup + poll every 60s
 
@@ -538,6 +632,11 @@ app.whenReady().then(() => {
       createWindow()
     } else {
       mainWindow.show()
+    }
+    if (wtiWindow === null) {
+      createWtiWindow()
+    } else if (!wtiWindow.isVisible()) {
+      wtiWindow.show()
     }
   })
 })

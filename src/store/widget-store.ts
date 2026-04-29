@@ -28,6 +28,10 @@ interface WidgetState {
   splitConfig: Record<MarketSymbol, SplitCoinConfig>
   /** Whether WTI rides the split as an inverse hedge (long crypto → short WTI, etc.) */
   wtiHedgeEnabled: boolean
+  /** Pinned state of the standalone WTI floating window (separate from main widget). */
+  wtiIsPinned: boolean
+  /** USD size used by the standalone WTI floating window. */
+  wtiUsdSize: string
 
   toggleWidget: () => void
   setOpen: (open: boolean) => void
@@ -41,6 +45,8 @@ interface WidgetState {
   toggleSplitCoin: (symbol: MarketSymbol) => void
   setSplitPct: (symbol: MarketSymbol, pct: number) => void
   toggleWtiHedge: () => void
+  toggleWtiIsPinned: () => void
+  setWtiUsdSize: (size: string) => void
 }
 
 // ── Electron-aware storage adapter ─────────────────────────
@@ -131,6 +137,8 @@ export const useWidgetStore = create<WidgetState>()(
         WTI: { enabled: false, pct: 0 },
       },
       wtiHedgeEnabled: false,
+      wtiIsPinned: true,
+      wtiUsdSize: String(MARKETS.WTI.minQuote),
 
       toggleWidget: () => set((s) => ({ isOpen: !s.isOpen })),
       setOpen: (open) => set({ isOpen: open }),
@@ -160,6 +168,8 @@ export const useWidgetStore = create<WidgetState>()(
           },
         })),
       toggleWtiHedge: () => set((s) => ({ wtiHedgeEnabled: !s.wtiHedgeEnabled })),
+      toggleWtiIsPinned: () => set((s) => ({ wtiIsPinned: !s.wtiIsPinned })),
+      setWtiUsdSize: (size) => set({ wtiUsdSize: size }),
     }),
     {
       name: 'lighter-widget',
@@ -174,6 +184,8 @@ export const useWidgetStore = create<WidgetState>()(
         splitEnabled: state.splitEnabled,
         splitConfig: state.splitConfig,
         wtiHedgeEnabled: state.wtiHedgeEnabled,
+        wtiIsPinned: state.wtiIsPinned,
+        wtiUsdSize: state.wtiUsdSize,
       }),
       // Deep-merge persisted prefs into current defaults so stores saved
       // before a new symbol/key existed (e.g. WTI) hydrate without holes.

@@ -13,6 +13,8 @@ export interface UserPreferences {
   isPinned?: boolean
   activeTab?: string
   usdSizes?: Record<string, string>
+  wtiIsPinned?: boolean
+  wtiUsdSize?: string
 }
 
 // ── Constants ──────────────────────────────────────────────
