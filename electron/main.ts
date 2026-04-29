@@ -94,6 +94,10 @@ function createWindow(): void {
   mainWindow.on('moved', debouncedSave)
   mainWindow.on('resized', debouncedSave)
 
+  // Show on every Space, including over fullscreen apps, so the widget
+  // follows the user across desktops on macOS.
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
   // Load the desktop-optimized page
   if (IS_DEV) {
     mainWindow.loadURL(DEV_SERVER_URL)
@@ -159,6 +163,16 @@ function createTray(): void {
       checked: true,
       click: (menuItem) => {
         mainWindow?.setAlwaysOnTop(menuItem.checked)
+      },
+    },
+    {
+      label: 'Show on All Desktops',
+      type: 'checkbox',
+      checked: true,
+      click: (menuItem) => {
+        mainWindow?.setVisibleOnAllWorkspaces(menuItem.checked, {
+          visibleOnFullScreen: true,
+        })
       },
     },
     { type: 'separator' },
