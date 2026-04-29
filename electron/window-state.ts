@@ -21,26 +21,46 @@ interface WindowStateFile {
 
 // ── Defaults ───────────────────────────────────────────────
 
-const DEFAULT_WIDTH = 420
-const DEFAULT_HEIGHT = 680
 const EDGE_MARGIN = 24
 
-const STATE_FILENAME = 'window-state.json'
+export interface WindowStateConfig {
+  /** Filename inside userData (each window gets its own state file) */
+  filename: string
+  defaultWidth: number
+  defaultHeight: number
+  /** Vertical offset above the bottom edge — lets multiple windows stack. */
+  bottomOffset?: number
+}
+
+export const MAIN_WINDOW_CONFIG: WindowStateConfig = {
+  filename: 'window-state.json',
+  defaultWidth: 420,
+  defaultHeight: 680,
+}
+
+export const WTI_WINDOW_CONFIG: WindowStateConfig = {
+  filename: 'wti-window-state.json',
+  defaultWidth: 220,
+  defaultHeight: 140,
+  // Sit just above the main widget by default
+  bottomOffset: 720,
+}
 
 // ── Helpers ────────────────────────────────────────────────
 
-function getStatePath(): string {
-  return path.join(app.getPath('userData'), STATE_FILENAME)
+function getStatePath(filename: string): string {
+  return path.join(app.getPath('userData'), filename)
 }
 
 /** Compute default bottom-right position based on primary display */
-export function getDefaultBounds(): WindowBounds {
+export function getDefaultBounds(config: WindowStateConfig): WindowBounds {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize
+  const verticalGap = config.bottomOffset ?? config.defaultHeight + EDGE_MARGIN
   return {
-    x: sw - DEFAULT_WIDTH - EDGE_MARGIN,
-    y: sh - DEFAULT_HEIGHT - EDGE_MARGIN,
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
+    x: sw - config.defaultWidth - EDGE_MARGIN,
+    y: sh - verticalGap,
+    width: config.defaultWidth,
+    height: config.defaultHeight,
   }
 }
 
@@ -50,7 +70,10 @@ export function getDefaultBounds(): WindowBounds {
  * disconnected), reset to the default bottom-right position while
  * preserving the saved dimensions.
  */
-function ensureBoundsOnScreen(bounds: WindowBounds): WindowBounds {
+function ensureBoundsOnScreen(
+  bounds: WindowBounds,
+  config: WindowStateConfig,
+): WindowBounds {
   const displays = screen.getAllDisplays()
 
   // Check if at least a 50×50 px region of the window is visible
@@ -72,7 +95,7 @@ function ensureBoundsOnScreen(bounds: WindowBounds): WindowBounds {
   if (isVisible) return bounds
 
   // Position is offscreen — reset position but keep saved size
-  const defaults = getDefaultBounds()
+  const defaults = getDefaultBounds(config)
   return {
     x: defaults.x,
     y: defaults.y,
@@ -88,9 +111,9 @@ function ensureBoundsOnScreen(bounds: WindowBounds): WindowBounds {
  * Returns validated bounds, falling back to defaults if the file
  * doesn't exist or is corrupted.
  */
-export function loadWindowState(): WindowBounds {
+export function loadWindowState(config: WindowStateConfig): WindowBounds {
   try {
-    const raw = fs.readFileSync(getStatePath(), 'utf-8')
+    const raw = fs.readFileSync(getStatePath(config.filename), 'utf-8')
     const state: WindowStateFile = JSON.parse(raw)
 
     if (
@@ -100,22 +123,25 @@ export function loadWindowState(): WindowBounds {
       typeof state.bounds.width === 'number' &&
       typeof state.bounds.height === 'number'
     ) {
-      return ensureBoundsOnScreen(state.bounds)
+      return ensureBoundsOnScreen(state.bounds, config)
     }
   } catch {
     // File doesn't exist or is malformed — use defaults
   }
 
-  return getDefaultBounds()
+  return getDefaultBounds(config)
 }
 
 /**
  * Persist current window bounds to disk.
  * Writes atomically (write to temp file, then rename).
  */
-export function saveWindowState(bounds: WindowBounds): void {
+export function saveWindowState(
+  config: WindowStateConfig,
+  bounds: WindowBounds,
+): void {
   const state: WindowStateFile = { bounds }
-  const statePath = getStatePath()
+  const statePath = getStatePath(config.filename)
 
   try {
     const tmpPath = statePath + '.tmp'
@@ -130,9 +156,9 @@ export function saveWindowState(bounds: WindowBounds): void {
 /**
  * Delete the persisted state file (used by "Reset Position" tray action).
  */
-export function clearWindowState(): void {
+export function clearWindowState(config: WindowStateConfig): void {
   try {
-    fs.unlinkSync(getStatePath())
+    fs.unlinkSync(getStatePath(config.filename))
   } catch {
     // File may not exist — that's fine
   }
