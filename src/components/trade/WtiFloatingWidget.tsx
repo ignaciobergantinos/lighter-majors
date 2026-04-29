@@ -97,22 +97,26 @@ export function WtiFloatingWidget() {
         <button
           onClick={() => handleTrade('long')}
           disabled={disabled}
+          aria-label="Long WTI"
+          title="Long WTI"
           className="h-full text-base sm:text-lg font-extrabold tracking-wide rounded-xl
                      bg-emerald-500/15 text-emerald-400 border border-emerald-500/30
                      hover:bg-emerald-500/25 active:scale-[0.97]
                      disabled:opacity-40 transition-all"
         >
-          {isTrading ? '...' : 'LONG'}
+          {isTrading ? '...' : 'WTI'}
         </button>
         <button
           onClick={() => handleTrade('short')}
           disabled={disabled}
+          aria-label="Short WTI"
+          title="Short WTI"
           className="h-full text-base sm:text-lg font-extrabold tracking-wide rounded-xl
                      bg-red-500/15 text-red-400 border border-red-500/30
                      hover:bg-red-500/25 active:scale-[0.97]
                      disabled:opacity-40 transition-all"
         >
-          {isTrading ? '...' : 'SHORT'}
+          {isTrading ? '...' : 'WTI'}
         </button>
       </div>
     </div>
