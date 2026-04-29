@@ -77,6 +77,29 @@ export function DesktopTradeWidget() {
     [placeTrade, placeSplitTrade, splitEnabled, splitConfig, wtiHedgeEnabled, activeTab, getBaseAmount, usdSize, markPrice, prices],
   )
 
+  /** Quick-action: trade WTI directly regardless of selected tab, bypassing split. */
+  const handleWtiTrade = useCallback(
+    (side: 'long' | 'short') => {
+      const usd = parseFloat(usdSize) || 0
+      const wtiTick = prices.WTI
+      const wtiPrice = wtiTick ? parseFloat(wtiTick.markPrice) : 0
+      const wtiMarket = MARKETS.WTI
+      let baseAmount: number | undefined
+      if (usd > 0 && wtiPrice > 0) {
+        const rounded = parseFloat((usd / wtiPrice).toFixed(wtiMarket.sizeDecimals))
+        baseAmount = rounded >= wtiMarket.minBaseAmount ? rounded : undefined
+      }
+      placeTrade({
+        symbol: 'WTI',
+        side,
+        baseAmount,
+        usdSize: usd || undefined,
+        markPrice: wtiPrice || undefined,
+      })
+    },
+    [placeTrade, prices, usdSize],
+  )
+
   const pnl = useMemo(() => aggregateLivePnl(positions, prices), [positions, prices])
   const isProfit = pnl >= 0
   const hasPositions = positions.length > 0
@@ -217,6 +240,30 @@ export function DesktopTradeWidget() {
                        ${isUltraCompact ? 'col-span-2' : ''}`}
           >
             {isClosing ? '...' : 'Close'}
+          </button>
+        </div>
+
+        {/* Row 2b: WTI quick-actions — always trade WTI regardless of selected tab. */}
+        <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
+          <button
+            onClick={() => handleWtiTrade('long')}
+            disabled={isTrading}
+            className="py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-lg
+                       bg-emerald-500/15 text-emerald-400 border border-emerald-500/30
+                       hover:bg-emerald-500/25 active:scale-[0.97]
+                       disabled:opacity-40 transition-all truncate"
+          >
+            {isTrading ? '...' : 'WTI Long'}
+          </button>
+          <button
+            onClick={() => handleWtiTrade('short')}
+            disabled={isTrading}
+            className="py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-lg
+                       bg-red-500/15 text-red-400 border border-red-500/30
+                       hover:bg-red-500/25 active:scale-[0.97]
+                       disabled:opacity-40 transition-all truncate"
+          >
+            {isTrading ? '...' : 'WTI Short'}
           </button>
         </div>
 
