@@ -40,10 +40,10 @@ export const MAIN_WINDOW_CONFIG: WindowStateConfig = {
 
 export const WTI_WINDOW_CONFIG: WindowStateConfig = {
   filename: 'wti-window-state.json',
-  defaultWidth: 220,
-  defaultHeight: 140,
+  defaultWidth: 280,
+  defaultHeight: 180,
   // Sit just above the main widget by default
-  bottomOffset: 720,
+  bottomOffset: 760,
 }
 
 // ── Helpers ────────────────────────────────────────────────

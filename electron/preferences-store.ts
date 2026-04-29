@@ -14,7 +14,6 @@ export interface UserPreferences {
   activeTab?: string
   usdSizes?: Record<string, string>
   wtiIsPinned?: boolean
-  wtiUsdSize?: string
 }
 
 // ── Constants ──────────────────────────────────────────────
