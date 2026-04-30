@@ -1,8 +1,7 @@
 // ── POST /api/trade — place a market order ──────────────────
 import { NextRequest, NextResponse } from 'next/server'
-import { placeMarketOrder, fetchAccountData, fetchMarkPrice } from '@/lib/lighter-client'
+import { placeMarketOrder, fetchMarkPrice } from '@/lib/lighter-client'
 import { MARKETS } from '@/lib/constants'
-import { notifyPositionOpen } from '@/lib/discord-notifier'
 import { correlationId, createLogger, withTiming } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
@@ -62,42 +61,6 @@ export async function POST(req: NextRequest) {
       log.warn('trade.order_rejected', { error: result.error })
       return NextResponse.json(result, { status: 400 })
     }
-
-    const price = priceForSizing > 0
-      ? priceForSizing
-      : typeof markPrice === 'number' && markPrice > 0 ? markPrice : undefined
-    const usdSize = typeof requestUsdSize === 'number' && requestUsdSize > 0
-      ? requestUsdSize
-      : price ? baseAmount * price : undefined
-
-    // Fire-and-forget: wait for exchange to settle, then send accurate notification.
-    // Detached so the trade API response returns immediately.
-    void (async () => {
-      let filledUsd: number | undefined
-      try {
-        // Give the exchange time to settle the trade
-        // Lighter taker latency: ~300ms (standard) / ~150ms (premium) + API fetch RTT
-        await new Promise((r) => setTimeout(r, 1000))
-        const account = await fetchAccountData(cid)
-        const pos = account.positions.find((p) => p.marketIndex === marketIndex)
-        if (pos) {
-          const posSize = Math.abs(parseFloat(pos.size || '0'))
-          const entryPrice = parseFloat(pos.entryPrice || '0')
-          filledUsd = entryPrice > 0 ? posSize * entryPrice : undefined
-        }
-      } catch {
-        // Non-fatal — send notification without filled size
-      }
-
-      notifyPositionOpen({
-        marketIndex,
-        side,
-        baseAmount,
-        usdSize,
-        price,
-        filledUsd,
-      })
-    })()
 
     return NextResponse.json(result)
   } catch (error) {
