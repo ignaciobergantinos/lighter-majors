@@ -1,17 +1,9 @@
 // ── Discord Webhook Notifications (fire-and-forget) ────────
-import { MARKETS } from './constants'
-import type { MarketSymbol, Position } from './types'
+import type { Position } from './types'
 
 const WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 
 // ── Helpers ────────────────────────────────────────────────
-
-function resolveSymbol(marketIndex: number): MarketSymbol {
-  for (const m of Object.values(MARKETS)) {
-    if (m.marketIndex === marketIndex) return m.symbol
-  }
-  return 'BTC'
-}
 
 function formatUsd(value: number): string {
   const sign = value >= 0 ? '' : '-'
@@ -43,52 +35,7 @@ async function postToDiscord(content: string): Promise<void> {
   }
 }
 
-// ── Deduplication ─────────────────────────────────────────
-// Track last notified filledUsd per market to skip duplicate notifications
-// when the filled qty hasn't changed (e.g. order still partially filled).
-const lastNotifiedFill = new Map<number, number>()
-
 // ── Public API ─────────────────────────────────────────────
-
-/** Notify Discord when a position is opened. Fire-and-forget.
- *  Skips notification if filledUsd is identical to the last one for this market. */
-export function notifyPositionOpen(params: {
-  marketIndex: number
-  side: 'long' | 'short'
-  baseAmount: number
-  usdSize?: number
-  price?: number
-  filledUsd?: number
-}): void {
-  // Dedup: skip if filled amount hasn't changed since last notification
-  if (params.filledUsd != null && params.filledUsd > 0) {
-    const prev = lastNotifiedFill.get(params.marketIndex)
-    if (prev != null && Math.abs(prev - params.filledUsd) < 0.01) {
-      console.log(`[discord] skipping duplicate notification for market ${params.marketIndex} — filledUsd unchanged (${params.filledUsd})`)
-      return
-    }
-    lastNotifiedFill.set(params.marketIndex, params.filledUsd)
-  }
-  const symbol = resolveSymbol(params.marketIndex)
-  const sideLabel = params.side === 'long' ? 'LONG' : 'SHORT'
-  const emoji = params.side === 'long' ? '🟢' : '🔴'
-
-  const requested = params.usdSize ?? (params.price ? params.baseAmount * params.price : null)
-  const filled = params.filledUsd
-
-  let sizeText: string
-  if (filled != null && filled > 0) {
-    const requestedText = requested != null ? ` ($${Math.round(requested)})` : ''
-    sizeText = `$${filled.toFixed(2)} FILLED${requestedText}`
-  } else {
-    sizeText = requested != null ? `$${requested.toFixed(2)}` : `${params.baseAmount} ${symbol}`
-  }
-
-  const message = `${emoji} **[Lighter] ${sideLabel} ${symbol}** — ${sizeText}`
-
-  // Fire-and-forget — do not await
-  void postToDiscord(message)
-}
 
 /** Notify Discord when a position is closed with P&L details. Fire-and-forget.
  *  If `realizedPnl` is provided, use it (true realized PnL from Lighter).
@@ -99,8 +46,6 @@ export function notifyPositionClose(params: {
   realizedPnl?: number
 }): void {
   const { position, realizedPnl } = params
-  // Clear dedup state so next open on this market notifies fresh
-  lastNotifiedFill.delete(position.marketIndex)
   const sideLabel = position.side === 'long' ? 'LONG' : 'SHORT'
   const closeEmoji = '✖️'
 

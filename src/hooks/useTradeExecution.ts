@@ -11,9 +11,9 @@ interface TradeParams {
   side: 'long' | 'short'
   /** Base amount to trade. Falls back to market minimum if omitted. */
   baseAmount?: number
-  /** USD size the user entered — forwarded for Discord notification. */
+  /** USD size the user entered — used server-side to size the order. */
   usdSize?: number
-  /** Current mark price — forwarded for Discord notification context. */
+  /** Current mark price — used server-side to size the order. */
   markPrice?: number
 }
 
