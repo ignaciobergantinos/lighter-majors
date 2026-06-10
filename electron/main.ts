@@ -350,6 +350,10 @@ const SYMBOL_PRIORITY = ['BTC', 'ETH', 'SOL', 'WTI'] as const
 // Symbols whose split direction is inverted from the requested side.
 const INVERSE_HEDGE_SYMBOLS: readonly string[] = ['WTI']
 
+// WTI quick-trade always sizes at available balance × this multiplier
+// (mirrors WTI_SIZE_MULTIPLIER in src/lib/constants.ts and the WTI window).
+const WTI_SIZE_MULTIPLIER = 20
+
 // Cached widget state from renderer — updated via IPC
 let widgetState: {
   activeTab: string
@@ -358,6 +362,7 @@ let widgetState: {
   splitEnabled: boolean
   splitConfig: Record<string, { enabled: boolean; pct: number }>
   wtiHedgeEnabled: boolean
+  balanceUsd: number
 } = {
   activeTab: 'BTC',
   usdSize: '10',
@@ -370,6 +375,7 @@ let widgetState: {
     WTI: { enabled: false, pct: 0 },
   },
   wtiHedgeEnabled: false,
+  balanceUsd: 0,
 }
 
 // Cached prices per symbol — fetched independently from Lighter REST API
@@ -441,6 +447,7 @@ ipcMain.on('widget:state-sync', (_event, state: {
   splitEnabled?: boolean
   splitConfig?: Record<string, { enabled: boolean; pct: number }>
   wtiHedgeEnabled?: boolean
+  balanceUsd?: number
 }) => {
   const prevTab = widgetState.activeTab
   widgetState = {
@@ -449,6 +456,7 @@ ipcMain.on('widget:state-sync', (_event, state: {
     splitEnabled: state.splitEnabled ?? widgetState.splitEnabled,
     splitConfig: state.splitConfig ?? widgetState.splitConfig,
     wtiHedgeEnabled: state.wtiHedgeEnabled ?? widgetState.wtiHedgeEnabled,
+    balanceUsd: state.balanceUsd ?? widgetState.balanceUsd,
   }
 
   // If renderer sends a valid price, update our cache too
@@ -544,6 +552,16 @@ function fireTrade(side: 'long' | 'short'): void {
   }
 }
 
+/** Long WTI sized at available balance × WTI_SIZE_MULTIPLIER (mirrors the WTI window). */
+function fireWtiLong(): void {
+  const usdSize = Math.floor(widgetState.balanceUsd * WTI_SIZE_MULTIPLIER)
+  if (usdSize < 10) {
+    console.warn(`[global-shortcut] WTI long skipped — size $${usdSize} below minQuote (balance $${widgetState.balanceUsd})`)
+    return
+  }
+  void fireSingleTrade('long', 'WTI', usdSize)
+}
+
 /**
  * On macOS, global shortcuts require Accessibility permission.
  * Prompt the user if permission hasn't been granted yet.
@@ -561,7 +579,7 @@ function ensureAccessibilityPermission(): boolean {
   dialog.showMessageBoxSync({
     type: 'info',
     title: 'Accessibility Permission Required',
-    message: 'Lighter Majors needs Accessibility permission to register global keyboard shortcuts (Ctrl+1, Ctrl+4) that work from any app.',
+    message: 'Lighter Majors needs Accessibility permission to register global keyboard shortcuts (Ctrl+1, Ctrl+4, Ctrl+5) that work from any app.',
     detail: 'Click OK to open System Settings. Add this app under Privacy & Security → Accessibility, then restart the app.',
     buttons: ['OK'],
   })
@@ -606,16 +624,31 @@ function registerGlobalShortcuts(): void {
     console.log('[global-shortcut] ✓ Registered Control+4 → Short')
   }
 
+  // Ctrl+5 → Long WTI (balance × 20, mirrors the WTI window)
+  const wtiOk = globalShortcut.register('Control+5', () => {
+    console.log('[global-shortcut] Ctrl+5 → LONG WTI')
+    mainWindow?.webContents.send('shortcut:fired', { action: 'long-wti' })
+    fireWtiLong()
+  })
+
+  if (!wtiOk) {
+    console.error('[global-shortcut] Failed to register Control+5')
+  } else {
+    console.log('[global-shortcut] ✓ Registered Control+5 → Long WTI')
+  }
+
   const longRegistered = globalShortcut.isRegistered('Control+1')
   const shortRegistered = globalShortcut.isRegistered('Control+4')
+  const wtiRegistered = globalShortcut.isRegistered('Control+5')
 
-  console.log(`[global-shortcut] Verified: Ctrl+1=${longRegistered}, Ctrl+4=${shortRegistered}`)
+  console.log(`[global-shortcut] Verified: Ctrl+1=${longRegistered}, Ctrl+4=${shortRegistered}, Ctrl+5=${wtiRegistered}`)
 
   mainWindow?.webContents.send('shortcuts:status', {
-    active: longRegistered && shortRegistered,
+    active: longRegistered && shortRegistered && wtiRegistered,
     shortcuts: {
       'Control+1': longRegistered,
       'Control+4': shortRegistered,
+      'Control+5': wtiRegistered,
     },
   })
 }

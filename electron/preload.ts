@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     splitEnabled?: boolean
     splitConfig?: Record<string, { enabled: boolean; pct: number }>
     wtiHedgeEnabled?: boolean
+    balanceUsd?: number
   }) => ipcRenderer.send('widget:state-sync', state),
 
   /** Listen for global shortcut registration status from main process */

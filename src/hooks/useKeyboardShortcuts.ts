@@ -28,7 +28,7 @@ export function useKeyboardShortcuts() {
         typeof window !== 'undefined' &&
         !!window.electronAPI &&
         e.ctrlKey &&
-        (e.key === '1' || e.key === '4')
+        (e.key === '1' || e.key === '4' || e.key === '5')
       if (ownedByElectron) return
 
       const match = shortcuts.find(

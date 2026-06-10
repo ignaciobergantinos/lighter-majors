@@ -34,6 +34,7 @@ export function DesktopTradeWidget() {
 
   // Sync widget state to Electron main process for global shortcuts
   const markPrice = currentPrice ? parseFloat(currentPrice.markPrice) : 0
+  const balanceUsd = balance ? parseFloat(balance.availableBalance) || 0 : 0
   useEffect(() => {
     window.electronAPI?.syncWidgetState({
       activeTab,
@@ -42,8 +43,9 @@ export function DesktopTradeWidget() {
       splitEnabled,
       splitConfig,
       wtiHedgeEnabled,
+      balanceUsd,
     })
-  }, [activeTab, usdSize, markPrice, splitEnabled, splitConfig, wtiHedgeEnabled])
+  }, [activeTab, usdSize, markPrice, splitEnabled, splitConfig, wtiHedgeEnabled, balanceUsd])
 
   const getBaseAmount = useCallback((): number | undefined => {
     const usd = parseFloat(usdSize)
