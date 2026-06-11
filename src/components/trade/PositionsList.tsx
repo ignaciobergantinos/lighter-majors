@@ -3,7 +3,7 @@
 import type { Position } from '@/lib/types'
 import { PositionRow } from './PositionRow'
 import { useWidgetStore } from '@/store/widget-store'
-import { aggregateLivePnl } from '@/lib/pnl'
+import { aggregateLivePnl, aggregateLivePnlPercent } from '@/lib/pnl'
 
 interface PositionsListProps {
   positions: Position[]
@@ -20,6 +20,7 @@ export function PositionsList({
 }: PositionsListProps) {
   const prices = useWidgetStore((s) => s.prices)
   const pnl = aggregateLivePnl(positions, prices)
+  const pnlPercent = aggregateLivePnlPercent(positions, prices)
   const isProfit = pnl >= 0
 
   if (positions.length === 0) {
@@ -41,7 +42,7 @@ export function PositionsList({
             isProfit ? 'text-emerald-400' : 'text-red-400'
           }`}
         >
-          PnL: {isProfit ? '+' : ''}${pnl.toFixed(2)}
+          PnL: {isProfit ? '+' : ''}{pnlPercent.toFixed(2)}%
         </span>
       </div>
 

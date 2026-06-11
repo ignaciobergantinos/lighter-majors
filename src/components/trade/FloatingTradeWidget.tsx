@@ -1,7 +1,7 @@
 // ── Floating Trade Widget — Compact 3-Row Layout ────────────
 'use client'
 import { useCallback, useMemo, useRef } from 'react'
-import { TrendingUp, X, Pin, PinOff } from 'lucide-react'
+import { TrendingUp, X, Pin, PinOff, Eye, EyeOff } from 'lucide-react'
 import { useWidgetStore } from '@/store/widget-store'
 import { usePositions } from '@/hooks/usePositions'
 import { useTradeExecution } from '@/hooks/useTradeExecution'
@@ -12,10 +12,10 @@ import { PairTabs } from './PairTabs'
 import { SplitConfig } from './SplitConfig'
 import { MARKETS, SPLIT_SYMBOLS, INVERSE_HEDGE_SYMBOLS } from '@/lib/constants'
 import type { MarketSymbol } from '@/lib/types'
-import { aggregateLivePnl, livePnlFor } from '@/lib/pnl'
+import { aggregateLivePnl, aggregateLivePnlPercent, livePnlPercentFor } from '@/lib/pnl'
 
 export function FloatingTradeWidget() {
-  const { isOpen, isPinned, activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, wtiHedgeEnabled, toggleWidget, togglePinned, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit } =
+  const { isOpen, isPinned, activeTab, usdSizes, prices, autoSizeEnabled, splitEnabled, splitConfig, wtiHedgeEnabled, hideAmounts, toggleWidget, togglePinned, setActiveTab, setUsdSize, toggleAutoSize, toggleSplit, toggleHideAmounts } =
     useWidgetStore()
   const usdSize = usdSizes[activeTab]
   const { positions, balance, isLoading } = usePositions()
@@ -66,6 +66,7 @@ export function FloatingTradeWidget() {
   )
 
   const pnl = useMemo(() => aggregateLivePnl(positions, prices), [positions, prices])
+  const pnlPercent = useMemo(() => aggregateLivePnlPercent(positions, prices), [positions, prices])
   const isProfit = pnl >= 0
   const hasPositions = positions.length > 0
 
@@ -165,7 +166,7 @@ export function FloatingTradeWidget() {
                 </span>
                 <input
                   ref={sizeInputRef}
-                  type="number"
+                  type={hideAmounts ? 'password' : 'number'}
                   inputMode="decimal"
                   min={market.minQuote}
                   step={1}
@@ -247,13 +248,22 @@ export function FloatingTradeWidget() {
             {!isLoading && (
               <div className="flex items-center justify-between px-1 py-1">
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={toggleHideAmounts}
+                    className="text-zinc-600 hover:text-zinc-300 transition-colors"
+                    title={hideAmounts ? 'Show amounts' : 'Hide amounts'}
+                  >
+                    {hideAmounts ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
                   <span className="text-[10px] text-zinc-600 uppercase tracking-wide">
                     Bal
                   </span>
                   <span className="text-xs font-medium text-zinc-300">
-                    {balance
-                      ? `$${parseFloat(balance.availableBalance).toFixed(2)}`
-                      : '—'}
+                    {hideAmounts
+                      ? '••••'
+                      : balance
+                        ? `$${parseFloat(balance.availableBalance).toFixed(2)}`
+                        : '—'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -270,8 +280,8 @@ export function FloatingTradeWidget() {
                     }`}
                   >
                     {hasPositions
-                      ? `${isProfit ? '+' : ''}$${pnl.toFixed(2)}`
-                      : '$0.00'}
+                      ? `${isProfit ? '+' : ''}${pnlPercent.toFixed(2)}%`
+                      : '0.00%'}
                   </span>
                 </div>
               </div>
@@ -293,7 +303,7 @@ export function FloatingTradeWidget() {
                     {positions.map((pos) => {
                       const tick = prices[pos.symbol]
                       const mp = tick ? parseFloat(tick.markPrice) : undefined
-                      const posPnl = livePnlFor(pos, prices)
+                      const posPnlPct = livePnlPercentFor(pos, prices)
                       return (
                         <tr key={pos.marketIndex}>
                           <td className="text-left text-zinc-300 py-0.5">
@@ -303,13 +313,15 @@ export function FloatingTradeWidget() {
                             </span>
                           </td>
                           <td className="text-right text-zinc-400 py-0.5">
-                            ${(() => {
-                              const price = mp && mp > 0 ? mp : parseFloat(pos.entryPrice) || 0
-                              return (Math.abs(parseFloat(pos.size)) * price).toFixed(2)
-                            })()}
+                            {hideAmounts
+                              ? '••••'
+                              : `$${(() => {
+                                  const price = mp && mp > 0 ? mp : parseFloat(pos.entryPrice) || 0
+                                  return (Math.abs(parseFloat(pos.size)) * price).toFixed(2)
+                                })()}`}
                           </td>
-                          <td className={`text-right font-medium py-0.5 ${posPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {posPnl >= 0 ? '+' : ''}${posPnl.toFixed(2)}
+                          <td className={`text-right font-medium py-0.5 ${posPnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {posPnlPct >= 0 ? '+' : ''}{posPnlPct.toFixed(2)}%
                           </td>
                           <td className="text-right py-0.5">
                             <button

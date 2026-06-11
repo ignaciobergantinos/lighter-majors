@@ -23,10 +23,35 @@ export function livePnlFor(
   return parseFloat(position.pnl) || 0
 }
 
+/** Notional value (entry price × absolute size) for a position. */
+function notionalFor(position: Position): number {
+  return Math.abs(parseFloat(position.size)) * (parseFloat(position.entryPrice) || 0)
+}
+
+/** Live PnL as a percentage of notional for a single position. */
+export function livePnlPercentFor(
+  position: Position,
+  prices: Record<MarketSymbol, PriceTick | null>,
+): number {
+  const notional = notionalFor(position)
+  if (notional <= 0) return 0
+  return (livePnlFor(position, prices) / notional) * 100
+}
+
 /** Aggregate live PnL across all positions. */
 export function aggregateLivePnl(
   positions: Position[],
   prices: Record<MarketSymbol, PriceTick | null>,
 ): number {
   return positions.reduce((sum, pos) => sum + livePnlFor(pos, prices), 0)
+}
+
+/** Aggregate live PnL as a percentage of total notional across all positions. */
+export function aggregateLivePnlPercent(
+  positions: Position[],
+  prices: Record<MarketSymbol, PriceTick | null>,
+): number {
+  const totalNotional = positions.reduce((sum, pos) => sum + notionalFor(pos), 0)
+  if (totalNotional <= 0) return 0
+  return (aggregateLivePnl(positions, prices) / totalNotional) * 100
 }

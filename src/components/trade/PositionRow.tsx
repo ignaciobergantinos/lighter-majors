@@ -3,7 +3,7 @@
 import { X } from 'lucide-react'
 import type { Position } from '@/lib/types'
 import { useWidgetStore } from '@/store/widget-store'
-import { livePnlFor } from '@/lib/pnl'
+import { livePnlFor, livePnlPercentFor } from '@/lib/pnl'
 
 interface PositionRowProps {
   position: Position
@@ -13,7 +13,9 @@ interface PositionRowProps {
 
 export function PositionRow({ position, onClose, isClosing }: PositionRowProps) {
   const prices = useWidgetStore((s) => s.prices)
+  const hideAmounts = useWidgetStore((s) => s.hideAmounts)
   const pnl = livePnlFor(position, prices)
+  const pnlPercent = livePnlPercentFor(position, prices)
   const isProfit = pnl >= 0
 
   return (
@@ -37,7 +39,9 @@ export function PositionRow({ position, onClose, isClosing }: PositionRowProps) 
         <div className="text-right">
           <div className="text-[10px] text-zinc-500">Size</div>
           <div className="text-xs text-zinc-300">
-            ${(Math.abs(parseFloat(position.size)) * (parseFloat(position.entryPrice) || 0)).toFixed(2)}
+            {hideAmounts
+              ? '••••'
+              : `$${(Math.abs(parseFloat(position.size)) * (parseFloat(position.entryPrice) || 0)).toFixed(2)}`}
           </div>
         </div>
         <div className="text-right">
@@ -51,7 +55,7 @@ export function PositionRow({ position, onClose, isClosing }: PositionRowProps) 
               isProfit ? 'text-emerald-400' : 'text-red-400'
             }`}
           >
-            {isProfit ? '+' : ''}${pnl.toFixed(2)}
+            {isProfit ? '+' : ''}{pnlPercent.toFixed(2)}%
           </div>
         </div>
         <button
